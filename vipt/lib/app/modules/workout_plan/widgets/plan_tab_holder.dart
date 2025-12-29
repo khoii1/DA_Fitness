@@ -5,6 +5,8 @@ import 'package:get/get.dart';
 import 'package:vipt/app/core/values/asset_strings.dart';
 import 'package:vipt/app/core/values/colors.dart';
 import 'package:vipt/app/data/models/collection_setting.dart';
+import 'package:vipt/app/data/models/meal.dart';
+import 'package:vipt/app/data/models/meal_collection.dart';
 import 'package:vipt/app/data/models/meal_nutrition.dart';
 // 'nutrition.dart' no longer needed here
 import 'package:vipt/app/data/models/plan_exercise.dart';
@@ -39,6 +41,8 @@ class _PlanTabHolderState extends State<PlanTabHolder>
   final _controller = Get.find<WorkoutPlanController>();
 
   List<WorkoutCollection> workouts = [];
+  List<MealCollection> mealCollections =
+      []; // Thêm để lưu danh sách bữa ăn collections
   List<MealNutrition> meals = [];
   List<WorkoutCollection> allWorkouts = [];
   List<MealNutrition> allMeals = [];
@@ -105,50 +109,32 @@ class _PlanTabHolderState extends State<PlanTabHolder>
   }
 
   void _loadInitialData() {
-    workouts = _controller.loadWorkoutCollectionToShow(DateTime.now());
+    // Force reload admin collections from server
+    _forceReloadAdminData();
+  }
+
+  void _forceReloadAdminData() async {
+    debugPrint('🔄 _forceReloadAdminData: Starting reload...');
+
+    // Luôn load admin collections (planID = 0), bất kể controller state hiện tại
+    await _controller.loadPlanExerciseCollectionList(0, lightLoad: false);
+    workouts = _controller.loadAllWorkoutCollection();
     allWorkouts = _controller.loadAllWorkoutCollection();
 
-    _controller.loadMealListToShow(DateTime.now()).then((value) {
-      if (mounted) {
-        setState(() {
-          meals = value;
-        });
-      }
-    });
+    debugPrint('🏋️ Workouts loaded: ${workouts.length}');
+    debugPrint('📋 All workouts loaded: ${allWorkouts.length}');
 
-    // Load allMeals ngay từ đầu
-    _controller.loadAllMealList().then((value) async {
-      if (!mounted) return;
-      if (value.isNotEmpty) {
-        setState(() {
-          allMeals = value;
-          if (meals.isEmpty && allMeals.isNotEmpty) {
-            meals = allMeals.take(6).toList();
-          }
-        });
-      } else {
-        // Nếu API trả về rỗng, thử build fallback từ DataService.instance.mealList (local cache)
-        final cachedMeals = DataService.instance.mealList;
-        if (cachedMeals.isNotEmpty) {
-          List<MealNutrition> tmp = [];
-          int takeCount = cachedMeals.length >= 6 ? 6 : cachedMeals.length;
-          for (int i = 0; i < takeCount; i++) {
-            final mn = MealNutrition(meal: cachedMeals[i]);
-            try {
-              await mn.getIngredients();
-            } catch (_) {}
-            tmp.add(mn);
-          }
-          if (!mounted) return;
-          setState(() {
-            allMeals = tmp;
-            if (meals.isEmpty && allMeals.isNotEmpty) {
-              meals = allMeals.take(6).toList();
-            }
-          });
-        }
-      }
-    });
+    // Load admin meal collections (planID = 0)
+    await _controller.loadWorkoutPlanMealList(0, lightLoad: false);
+    mealCollections = _controller.getMealCollectionsByDate(DateTime.now());
+
+    debugPrint('🍽️ Meal collections loaded: ${mealCollections.length}');
+
+    if (mounted) {
+      setState(() {});
+    }
+
+    debugPrint('✅ _forceReloadAdminData: Completed');
   }
 
   void _reloadData() {
@@ -158,89 +144,27 @@ class _PlanTabHolderState extends State<PlanTabHolder>
 
   void _reloadWorkouts() {
     if (!mounted) return;
-    setState(() {
-      workouts = _controller.loadWorkoutCollectionToShow(DateTime.now());
-      allWorkouts = _controller.loadAllWorkoutCollection();
+    // Reload admin collections thay vì phụ thuộc vào controller state
+    _controller.loadPlanExerciseCollectionList(0, lightLoad: false).then((_) {
+      if (!mounted) return;
+      setState(() {
+        workouts = _controller.loadAllWorkoutCollection();
+        allWorkouts = _controller.loadAllWorkoutCollection();
+      });
     });
   }
 
   void _reloadMeals() {
     if (!mounted) return;
 
-    // Ưu tiên load meals từ plan hiện tại trước
-    final currentPlanID = _controller.currentWorkoutPlan.value?.id ?? 0;
-    if (currentPlanID > 0) {
-      // Load từ plan hiện tại
-      _controller.loadWorkoutPlanMealList(currentPlanID, lightLoad: true).then((_) {
-        if (!mounted) return;
-        // Load today's plan meals từ plan hiện tại
-        _controller.loadMealListToShow(DateTime.now()).then((value) {
-          if (!mounted) return;
-          setState(() {
-            meals = value;
-          });
-
-          // Load allMeals từ plan hiện tại
-          _controller.loadAllMealList().then((allValue) {
-            if (!mounted) return;
-            setState(() {
-              allMeals = allValue;
-            });
-          });
-        });
+    // Force reload admin meal collections from server
+    _controller.loadWorkoutPlanMealList(0, lightLoad: false).then((_) {
+      if (!mounted) return;
+      setState(() {
+        // Update mealCollections from admin collections only
+        mealCollections = _controller.getMealCollectionsByDate(DateTime.now());
       });
-    } else {
-      // Fallback: Load today's plan meals first, then ensure we have a fallback to allMeals
-      _controller.loadMealListToShow(DateTime.now()).then((value) {
-        if (!mounted) return;
-        setState(() {
-          meals = value;
-        });
-
-        // If today's plan meals empty, try to use allMeals as fallback
-        if (meals.isEmpty) {
-          _controller.loadAllMealList().then((allValue) async {
-            if (!mounted) return;
-            if (allValue.isNotEmpty) {
-              setState(() {
-                allMeals = allValue;
-                if (meals.isEmpty && allMeals.isNotEmpty) {
-                  meals = allMeals.take(6).toList();
-                }
-              });
-            } else {
-              final cachedMeals = DataService.instance.mealList;
-              if (cachedMeals.isNotEmpty) {
-                List<MealNutrition> tmp = [];
-                int takeCount = cachedMeals.length >= 6 ? 6 : cachedMeals.length;
-                for (int i = 0; i < takeCount; i++) {
-                  final mn = MealNutrition(meal: cachedMeals[i]);
-                  try {
-                    await mn.getIngredients();
-                  } catch (_) {}
-                  tmp.add(mn);
-                }
-                if (!mounted) return;
-                setState(() {
-                  allMeals = tmp;
-                  if (meals.isEmpty && allMeals.isNotEmpty) {
-                    meals = allMeals.take(6).toList();
-                  }
-                });
-              }
-            }
-          });
-        } else {
-          // still refresh allMeals in background
-          _controller.loadAllMealList().then((allValue) {
-            if (!mounted) return;
-            setState(() {
-              allMeals = allValue;
-            });
-          });
-        }
-      });
-    }
+    });
   }
 
   /// Thiết lập listeners để lắng nghe thay đổi từ DataService
@@ -327,9 +251,8 @@ class _PlanTabHolderState extends State<PlanTabHolder>
                   },
                 ),
                 Obx(() {
-                  // Hiển thị nút nếu có dữ liệu workout (có thể từ default plan hoặc user plan)
-                  if (allWorkouts.isNotEmpty ||
-                      _controller.planExerciseCollection.isNotEmpty) {
+                  // Chỉ hiển thị nút nếu có admin-created workout collections
+                  if (_controller.planExerciseCollection.isNotEmpty) {
                     // Lấy startDate từ workout plan nếu có, nếu không thì dùng ngày hiện tại
                     DateTime startDate =
                         _controller.currentWorkoutPlan.value?.startDate ??
@@ -347,10 +270,12 @@ class _PlanTabHolderState extends State<PlanTabHolder>
                                   ),
                         ),
                         onPressed: () {
-                          // Navigate to full-screen AllPlanExerciseScreen
+                          // Navigate to full-screen AllPlanExerciseScreen with admin collections
+                          final adminCollections =
+                              _controller.loadAllWorkoutCollection();
                           Get.to(() => AllPlanExerciseScreen(
                                 startDate: startDate,
-                                workoutCollectionList: allWorkouts,
+                                workoutCollectionList: adminCollections,
                                 elementOnPress: (col) async {
                                   await _handleSelectExercise(col);
                                 },
@@ -370,16 +295,15 @@ class _PlanTabHolderState extends State<PlanTabHolder>
                       padding: EdgeInsets.all(24.0), child: LoadingWidget())
                   : Column(
                       children: [
-                        ..._buildNutritionList(
-                          nutritionList: meals,
-                          elementOnPress: (nutri) async {
-                            await handleSelectMeal(nutri);
+                        ..._buildMealCollectionList(
+                          mealCollectionList: mealCollections,
+                          elementOnPress: (collection) async {
+                            await handleSelectMealCollection(collection);
                           },
                         ),
                         Obx(() {
-                          // Hiển thị nút nếu có dữ liệu meal (có thể từ default plan hoặc user plan)
-                          if (allMeals.isNotEmpty ||
-                              _controller.planMealCollection.isNotEmpty) {
+                          // Chỉ hiển thị nút nếu có admin-created meal collections
+                          if (_controller.planMealCollection.isNotEmpty) {
                             // Lấy startDate từ workout plan nếu có, nếu không thì dùng ngày hiện tại
                             DateTime startDate = _controller
                                     .currentWorkoutPlan.value?.startDate ??
@@ -399,96 +323,51 @@ class _PlanTabHolderState extends State<PlanTabHolder>
                                       ),
                                 ),
                                 onPressed: () async {
-                                  int planID = _controller
-                                          .currentWorkoutPlan.value?.id ??
-                                      0;
-                                  // Load full meal collections for this plan (no lightLoad)
-                                  // Nếu không có plan hiện tại, thử load từ recommendation data
-                                  if (planID == 0) {
-                                    try {
-                                      final recommendationController = Get.find<RecommendationPreviewController>();
-                                      planID = recommendationController.recommendationData['createdPlanID'] as int? ?? 0;
-                                    } catch (_) {}
-                                  }
-                                  try {
-                                    await _controller.loadWorkoutPlanMealList(
-                                        planID,
-                                        lightLoad: false);
-                                  } catch (_) {}
-
-                                  if (!mounted) return;
-
-                                  // Show a simple loading dialog while we fetch full data
+                                  // Navigate to full-screen AllPlanNutritionScreen with admin meal collections
                                   UIUtils.showLoadingDialog();
-                                  // Try to load all meal nutritions from current plan first
+
                                   List<MealNutrition> nutritionToShow = [];
-                                  int currentPlanID = _controller.currentWorkoutPlan.value?.id ?? 0;
-
-                                  if (currentPlanID == 0) {
-                                    try {
-                                      final recommendationController = Get.find<RecommendationPreviewController>();
-                                      currentPlanID = recommendationController.recommendationData['createdPlanID'] as int? ?? 0;
-                                    } catch (_) {}
-                                  }
-
                                   try {
-                                    if (currentPlanID > 0) {
-                                      // Load từ plan hiện tại
-                                      await _controller.loadWorkoutPlanMealList(currentPlanID, lightLoad: false);
-                                      nutritionToShow = await _controller.loadAllMealList();
-                                    } else {
-                                      // Fallback: Load từ cache hoặc meals hiện tại
-                                      nutritionToShow = await _controller.loadAllMealList();
-                                    }
-                                  } catch (_) {
-                                    nutritionToShow = allMeals.isNotEmpty ? allMeals : meals;
-                                  }
+                                    // Load admin collections (planID = 0)
+                                    await _controller.loadWorkoutPlanMealList(0,
+                                        lightLoad: false);
 
-                                  // If still empty, try to build nutrition list from controller.planMeal using local cache or API
-                                  if (nutritionToShow.isEmpty && _controller.planMeal.isNotEmpty) {
-                                    final firebaseMealProvider = MealProvider();
-                                    List<MealNutrition> tmp = [];
-                                    for (var pm in _controller.planMeal) {
-                                      final mealId = pm.mealID;
-                                      if (mealId.isEmpty) continue;
-                                      try {
-                                        // Try in-memory cache first
-                                        final existing = DataService.instance.mealList.firstWhereOrNull((m) => m.id == mealId);
-                                        if (existing != null) {
-                                          final mn = MealNutrition(meal: existing);
-                                          try {
-                                            await mn.getIngredients();
-                                          } catch (_) {}
-                                          tmp.add(mn);
-                                        } else {
-                                          // Fetch from API
-                                          final m = await firebaseMealProvider.fetch(mealId);
-                                          final mn = MealNutrition(meal: m);
-                                          try {
-                                            await mn.getIngredients();
-                                          } catch (_) {}
-                                          tmp.add(mn);
+                                    // Build nutrition list from admin plan meals
+                                    if (_controller.planMeal.isNotEmpty) {
+                                      final firebaseMealProvider =
+                                          MealProvider();
+                                      List<MealNutrition> tmp = [];
+                                      for (var pm in _controller.planMeal) {
+                                        final mealId = pm.mealID;
+                                        if (mealId.isEmpty) continue;
+                                        try {
+                                          final existing = DataService
+                                              .instance.mealList
+                                              .firstWhereOrNull(
+                                                  (m) => m.id == mealId);
+                                          if (existing != null) {
+                                            final mn =
+                                                MealNutrition(meal: existing);
+                                            try {
+                                              await mn.getIngredients();
+                                            } catch (_) {}
+                                            tmp.add(mn);
+                                          }
+                                        } catch (e) {
+                                          debugPrint(
+                                              '⚠️ Failed to load meal $mealId: $e');
                                         }
-                                      } catch (e) {
-                                        // ignore individual failures
-                                        debugPrint('⚠️ build nutrition from planMeal failed for $mealId: $e');
                                       }
-                                    }
-                                    if (tmp.isNotEmpty) {
                                       nutritionToShow = tmp;
                                     }
+                                  } catch (e) {
+                                    debugPrint(
+                                        '⚠️ Failed to load admin meal collections: $e');
                                   }
 
-                                  // Final fallback: use the local `meals` already loaded in this widget
-                                  if (nutritionToShow.isEmpty && meals.isNotEmpty) {
-                                    nutritionToShow = meals;
-                                  }
-
-                                  // Hide loading and navigate to full-screen AllPlanNutritionScreen
                                   UIUtils.hideLoadingDialog();
                                   if (!mounted) return;
-                                  debugPrint(
-                                      '🔍 Navigating to AllPlanNutritionScreen: nutritionToShow.length=${nutritionToShow.length}, controller.planMeal.length=${_controller.planMeal.length}, controller.planMealCollection.length=${_controller.planMealCollection.length}');
+
                                   Get.to(() => AllPlanNutritionScreen(
                                         isLoading: false,
                                         nutritionList: nutritionToShow,
@@ -679,6 +558,11 @@ class _PlanTabHolderState extends State<PlanTabHolder>
       );
 
       if (i % collectionPerDay == 0) {
+        // Tìm ngày thực tế từ PlanExerciseCollection
+        final planExerciseCollection = _controller.planExerciseCollection
+            .firstWhereOrNull((col) => col.id == collection.id);
+        final actualDate = planExerciseCollection?.date ?? DateTime.now();
+
         Widget dayIndicator = Padding(
           padding: const EdgeInsets.only(top: 16, bottom: 4),
           child: Row(
@@ -709,7 +593,7 @@ class _PlanTabHolderState extends State<PlanTabHolder>
                     height: 2,
                   ),
                   Text(
-                    '${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
+                    '${actualDate.day}/${actualDate.month}/${actualDate.year}',
                     style: Theme.of(context).textTheme.bodyLarge!.copyWith(
                           color: AppColor.textColor.withOpacity(
                             AppColor.subTextOpacity,
@@ -759,7 +643,9 @@ class _PlanTabHolderState extends State<PlanTabHolder>
     // Build mealsByDate using controller.planMealCollection and controller.planMeal
     for (var col in controller.planMealCollection) {
       final dateKey = DateUtils.dateOnly(col.date);
-      final planMeals = controller.planMeal.where((pm) => pm.listID == (col.id ?? '')).toList();
+      final planMeals = controller.planMeal
+          .where((pm) => pm.listID == (col.id ?? ''))
+          .toList();
       for (var pm in planMeals) {
         final mn = nutritionMap[pm.mealID];
         if (mn != null) {
@@ -776,7 +662,8 @@ class _PlanTabHolderState extends State<PlanTabHolder>
       for (int i = 0; i < count; i++) {
         if (i % collectionPerDay == 0) {
           // attempt to infer day based on index and today's date offset
-          DateTime inferredDate = DateTime.now().add(Duration(days: i ~/ collectionPerDay));
+          DateTime inferredDate =
+              DateTime.now().add(Duration(days: i ~/ collectionPerDay));
           mealsByDate.putIfAbsent(DateUtils.dateOnly(inferredDate), () => []);
         }
         final mn = nutritionList[i];
@@ -817,7 +704,8 @@ class _PlanTabHolderState extends State<PlanTabHolder>
                 Text(
                   '${date.day}/${date.month}/${date.year}',
                   style: Theme.of(context).textTheme.bodyLarge!.copyWith(
-                        color: AppColor.textColor.withOpacity(AppColor.subTextOpacity),
+                        color: AppColor.textColor
+                            .withOpacity(AppColor.subTextOpacity),
                       ),
                 ),
               ],
@@ -839,7 +727,9 @@ class _PlanTabHolderState extends State<PlanTabHolder>
         Widget collectionToWidget = Container(
           margin: const EdgeInsets.symmetric(vertical: 8),
           child: ExerciseInCollectionTile(
-            asset: nutrition.meal.asset == '' ? JPGAssetString.meal : nutrition.meal.asset,
+            asset: nutrition.meal.asset == ''
+                ? JPGAssetString.meal
+                : nutrition.meal.asset,
             title: nutrition.getName(),
             description: nutrition.calories.toStringAsFixed(0) + ' kcal',
             onPressed: () {
@@ -851,6 +741,138 @@ class _PlanTabHolderState extends State<PlanTabHolder>
       }
 
       dayNumber++;
+    }
+
+    return results;
+  }
+
+  // Handle khi user chọn một meal collection
+  Future<void> handleSelectMealCollection(MealCollection collection) async {
+    // Lấy danh sách meal IDs từ collection
+    final dateKey =
+        DateUtils.dateOnly(DateTime.now()).toIso8601String().split('T')[0];
+    final mealIDs = collection.dateToMealID[dateKey] ?? [];
+
+    if (mealIDs.isEmpty) {
+      // Fallback: show message
+      Get.snackbar('Thông báo', 'Không có món ăn nào trong danh sách này');
+      return;
+    }
+
+    // Load meal nutrition cho các meal IDs này
+    final firebaseMealProvider = MealProvider();
+    List<MealNutrition> mealNutritions = [];
+
+    for (String mealID in mealIDs) {
+      try {
+        Meal? meal = await firebaseMealProvider.fetch(mealID);
+        if (meal != null) {
+          MealNutrition mealNutri = MealNutrition(meal: meal);
+          await mealNutri.getIngredients();
+          mealNutritions.add(mealNutri);
+        }
+      } catch (e) {
+        debugPrint('Error loading meal $mealID: $e');
+      }
+    }
+
+    // Navigate to dish detail screen với meal đầu tiên, hoặc meal plan detail
+    if (mealNutritions.isNotEmpty) {
+      Get.toNamed(Routes.dishDetail, arguments: mealNutritions.first.meal);
+    } else {
+      Get.snackbar('Thông báo', 'Không có món ăn nào để hiển thị');
+    }
+  }
+
+  // Build danh sách meal collections tương tự workout collections
+  _buildMealCollectionList(
+      {required List<MealCollection> mealCollectionList,
+      required Function(MealCollection) elementOnPress}) {
+    int collectionPerDay = 3; // Meals có ít collections hơn workouts
+    List<Widget> results = [];
+
+    int count = mealCollectionList.length;
+    for (int i = 0; i < count; i++) {
+      MealCollection collection = mealCollectionList[i];
+
+      // Lấy số lượng meals trong collection - dùng tất cả meals từ dateToMealID
+      final allMealIDs =
+          collection.dateToMealID.values.expand((ids) => ids).toList();
+      final mealCount = allMealIDs.length;
+      String description = '$mealCount món ăn';
+
+      Widget collectionToWidget = Container(
+        margin: const EdgeInsets.symmetric(vertical: 8),
+        child: ExerciseInCollectionTile(
+            asset: collection.asset.isNotEmpty
+                ? collection.asset
+                : JPGAssetString.nutrition, // Sử dụng icon nutrition
+            title: collection.title,
+            description: description,
+            onPressed: () {
+              elementOnPress(collection);
+            }),
+      );
+
+      if (i % collectionPerDay == 0) {
+        // Tìm ngày thực tế từ PlanMealCollection
+        final planMealCollection = _controller.planMealCollection
+            .firstWhereOrNull((col) => col.id == collection.id);
+        final actualDate = planMealCollection?.date ?? DateTime.now();
+
+        Widget dayIndicator = Padding(
+          padding: const EdgeInsets.only(top: 16, bottom: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Divider(
+                  thickness: 1,
+                  color: AppColor.textFieldUnderlineColor,
+                ),
+              ),
+              const SizedBox(
+                width: 16,
+              ),
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'NGÀY ${i ~/ collectionPerDay + 1}',
+                    style: Theme.of(context).textTheme.titleSmall!.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                  const SizedBox(
+                    height: 2,
+                  ),
+                  Text(
+                    '${actualDate.day}/${actualDate.month}/${actualDate.year}',
+                    style: Theme.of(context).textTheme.bodyLarge!.copyWith(
+                          color: AppColor.textColor.withOpacity(
+                            AppColor.subTextOpacity,
+                          ),
+                        ),
+                  ),
+                ],
+              ),
+              const SizedBox(
+                width: 16,
+              ),
+              Expanded(
+                child: Divider(
+                  thickness: 1,
+                  color: AppColor.textFieldUnderlineColor,
+                ),
+              ),
+            ],
+          ),
+        );
+
+        results.add(dayIndicator);
+      }
+
+      results.add(collectionToWidget);
     }
 
     return results;

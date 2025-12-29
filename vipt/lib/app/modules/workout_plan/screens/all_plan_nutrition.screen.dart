@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:vipt/app/core/values/asset_strings.dart';
 import 'package:vipt/app/core/values/colors.dart';
@@ -199,28 +199,33 @@ class AllPlanNutritionScreen extends StatelessWidget {
       required Function(MealNutrition) elementOnPress}) {
     List<Widget> results = [];
 
-    // Nhóm meals theo ngày từ controller
+    // Nh�m meals theo ng�y t? controller
     final controller = Get.find<WorkoutPlanController>();
     debugPrint(
-        '🔍 AllPlanNutritionScreen._buildNutritionList called: nutritionList.length=${nutritionList.length}, planMeal.length=${controller.planMeal.length}, planMealCollection.length=${controller.planMealCollection.length}');
+        '?? AllPlanNutritionScreen._buildNutritionList called: nutritionList.length=${nutritionList.length}, planMeal.length=${controller.planMeal.length}, planMealCollection.length=${controller.planMealCollection.length}');
     Map<DateTime, List<MealNutrition>> mealsByDate = {};
 
     // Normalize input: create a defensive copy of provided list to avoid mutating caller list.
     final List<MealNutrition> normalizedNutritionList =
         List<MealNutrition>.from(nutritionList);
 
-    // Lấy collections từ controller để có thông tin ngày chính xác
-    final allCollections = controller.planMealCollection;
+    // Ch? l?y admin collections (planID = 0) trong kho?ng 7 ng�y t? startDate
+    final allCollections = controller.planMealCollection
+        .where((col) =>
+            col.planID == 0 &&
+            col.date.isAfter(startDate.subtract(const Duration(days: 1))) &&
+            col.date.isBefore(startDate.add(const Duration(days: 7))))
+        .toList();
 
-    // Nếu không có planMealCollection (ví dụ khi người dùng chưa tạo plan),
-    // hiển thị nutritionList thẳng hàng (fallback) thay vì nhóm theo ngày rỗng.
+    // N?u kh�ng c� planMealCollection (v� d? khi ngu?i d�ng chua t?o plan),
+    // hi?n th? nutritionList th?ng h�ng (fallback) thay v� nh�m theo ng�y r?ng.
     if (allCollections.isEmpty) {
-      // Thêm một tiêu đề ngắn để báo là đang hiển thị gợi ý/không theo ngày
+      // Th�m m?t ti�u d? ng?n d? b�o l� dang hi?n th? g?i �/kh�ng theo ng�y
       if (normalizedNutritionList.isNotEmpty) {
         results.add(Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Text(
-            'Gợi ý món ăn',
+            'G?i � m�n an',
             style: Theme.of(context)
                 .textTheme
                 .titleMedium
@@ -249,7 +254,6 @@ class AllPlanNutritionScreen extends StatelessWidget {
       return results;
     }
 
-    // Tạo map từ meal ID sang MealNutrition
     final nutritionMap = <String, MealNutrition>{};
     for (var nutri in normalizedNutritionList) {
       try {
@@ -262,7 +266,7 @@ class AllPlanNutritionScreen extends StatelessWidget {
       }
     }
 
-    // Nhóm theo ngày từ plan collections
+    // Nh�m theo ng�y t? plan collections
     for (var planCol in allCollections) {
       if (planCol.id == null || planCol.id!.isEmpty) continue;
       final planMeals =
@@ -277,30 +281,15 @@ class AllPlanNutritionScreen extends StatelessWidget {
       }
     }
 
-    // Xác định khoảng ngày hiển thị: dùng plan.startDate..plan.endDate nếu có, ngược lại 30 ngày từ startDate
-    // Always limit displayed schedule to 7 days from startDate to match recommendation flow
-    const int capDays = 7;
-    DateTime rangeStart = DateUtils.dateOnly(startDate);
-    DateTime maxEndByCap = rangeStart.add(Duration(days: capDays - 1));
-    DateTime rangeEnd;
-    if (controller.currentWorkoutPlan.value != null) {
-      final planEnd =
-          DateUtils.dateOnly(controller.currentWorkoutPlan.value!.endDate);
-      // choose the earlier of planEnd and cap window
-      rangeEnd = planEnd.isBefore(maxEndByCap) ? planEnd : maxEndByCap;
-    } else {
-      rangeEnd = maxEndByCap;
-    }
+    // Ch? hi?n th? c�c ng�y c� data th?c s?
+    final sortedDates = mealsByDate.keys.toList()..sort();
 
     int dayNumber = 1;
-    // Track previous day's meal IDs to avoid consecutive duplicates when possible
-    List<String> prevDayMealIDs = [];
-    for (DateTime date = rangeStart;
-        !date.isAfter(rangeEnd);
-        date = date.add(const Duration(days: 1))) {
-      final dateKey = DateUtils.dateOnly(date);
+    for (var dateKey in sortedDates) {
+      final dayMeals = mealsByDate[dateKey]!;
+      if (dayMeals.isEmpty) continue;
 
-      // Thêm day indicator
+      // Th�m day indicator
       Widget dayIndicator = Padding(
         padding: const EdgeInsets.only(top: 4, bottom: 4),
         child: Row(
@@ -328,7 +317,7 @@ class AllPlanNutritionScreen extends StatelessWidget {
                   height: 2,
                 ),
                 Text(
-                  '${date.day}/${date.month}/${date.year}',
+                  '${dateKey.day}/${dateKey.month}/${dateKey.year}',
                   style: Theme.of(context).textTheme.bodyLarge!.copyWith(
                         color: AppColor.textColor.withOpacity(
                           AppColor.subTextOpacity,
@@ -352,69 +341,24 @@ class AllPlanNutritionScreen extends StatelessWidget {
 
       results.add(dayIndicator);
 
-      // Get existing meals from plan (may be empty)
-      List<MealNutrition> dayMeals = (mealsByDate[dateKey] ?? []).toList();
-
-      // Ensure 3 meals per day (breakfast/lunch/dinner)
-      const int mealsPerDay = 3;
-      if (dayMeals.length < mealsPerDay) {
-        // First pass: pick items not in prev day and not already chosen
-        for (var mn in normalizedNutritionList) {
-          if (dayMeals.length >= mealsPerDay) break;
-          final id = mn.meal.id ?? '';
-          if (id.isEmpty) continue;
-          if (dayMeals.any((d) => (d.meal.id ?? '') == id)) continue;
-          if (prevDayMealIDs.contains(id)) continue;
-          dayMeals.add(mn);
-        }
-        // Second pass: pick items not already chosen (allow prev day duplicates now)
-        for (var mn in normalizedNutritionList) {
-          if (dayMeals.length >= mealsPerDay) break;
-          final id = mn.meal.id ?? '';
-          if (id.isEmpty) continue;
-          if (dayMeals.any((d) => (d.meal.id ?? '') == id)) continue;
-          dayMeals.add(mn);
-        }
-        // Final fallback: allow duplicates if pool too small
-        int idx = 0;
-        while (dayMeals.length < mealsPerDay &&
-            normalizedNutritionList.isNotEmpty) {
-          dayMeals.add(
-              normalizedNutritionList[idx % normalizedNutritionList.length]);
-          idx++;
-        }
-      }
-
-      // Render the day's meals
+      // Hi?n th? meals cho ng�y n�y
       for (var nutrition in dayMeals) {
-        try {
-          final asset = (nutrition.meal.asset == ''
-              ? JPGAssetString.meal
-              : nutrition.meal.asset);
-          final title = nutrition.getName();
-          final desc = '${nutrition.calories.toStringAsFixed(0)} kcal';
-          Widget collectionToWidget = Container(
-            margin: const EdgeInsets.symmetric(vertical: 8),
-            child: ExerciseInCollectionTile(
-                asset: asset,
-                title: title,
-                description: desc,
-                onPressed: () {
-                  elementOnPress(nutrition);
-                }),
-          );
-          results.add(collectionToWidget);
-        } catch (e) {
-          debugPrint(
-              '⚠️ AllPlanNutritionScreen: skipped malformed nutrition item: $e');
-        }
+        Widget collectionToWidget = Container(
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          child: ExerciseInCollectionTile(
+              asset: nutrition.meal.asset == ''
+                  ? JPGAssetString.meal
+                  : nutrition.meal.asset,
+              title: nutrition.getName(),
+              description: nutrition.calories.toStringAsFixed(0) + ' kcal',
+              onPressed: () {
+                elementOnPress(nutrition);
+              }),
+        );
+
+        results.add(collectionToWidget);
       }
 
-      // remember today's meal IDs for next-day duplicate avoidance
-      prevDayMealIDs = dayMeals
-          .map((d) => d.meal.id ?? '')
-          .where((s) => s.isNotEmpty)
-          .toList();
       dayNumber++;
     }
 

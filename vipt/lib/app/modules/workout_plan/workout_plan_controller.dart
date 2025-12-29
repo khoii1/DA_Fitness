@@ -8,6 +8,7 @@ import 'package:vipt/app/core/values/colors.dart';
 import 'package:vipt/app/data/models/collection_setting.dart';
 import 'package:vipt/app/data/models/exercise_tracker.dart';
 import 'package:vipt/app/data/models/meal.dart';
+import 'package:vipt/app/data/models/meal_collection.dart';
 import 'package:vipt/app/data/models/meal_nutrition.dart';
 import 'package:vipt/app/data/models/meal_nutrition_tracker.dart';
 import 'package:vipt/app/data/models/plan_exercise.dart';
@@ -242,6 +243,11 @@ class WorkoutPlanController extends GetxController {
         return;
       }
 
+      // Nếu đang load user plan mà đã có admin collections, giữ lại admin collections
+      if (planID != 0 && planExerciseCollection.any((col) => col.planID == 0)) {
+        _log('📦 Đã có admin collections, merge với user collections');
+      }
+
       if (allCollections.isNotEmpty) {
         List<PlanExerciseCollection> filteredCollections = allCollections
             .where((col) =>
@@ -276,7 +282,41 @@ class WorkoutPlanController extends GetxController {
         }
         final dedupedExerciseCollections = _byDate.values.toList()
           ..sort((a, b) => a.date.compareTo(b.date));
-        planExerciseCollection.assignAll(dedupedExerciseCollections);
+
+        // Logic xử lý collections theo planID
+        if (planID == 0) {
+          // Admin plan: merge với existing collections, ưu tiên admin collections
+          final existingNonAdminCollections = planExerciseCollection.where((col) => col.planID != 0).toList();
+          final mergedCollections = [...dedupedExerciseCollections, ...existingNonAdminCollections];
+
+          final Map<DateTime, PlanExerciseCollection> _mergedByDate = {};
+          for (var col in mergedCollections) {
+            final key = DateUtils.dateOnly(col.date);
+            if (!_mergedByDate.containsKey(key) || col.planID == 0) {
+              // Ưu tiên admin collections (planID = 0)
+              _mergedByDate[key] = col;
+            }
+          }
+
+          planExerciseCollection.assignAll(_mergedByDate.values.toList()
+            ..sort((a, b) => a.date.compareTo(b.date)));
+        } else {
+          // User plan: merge với existing collections, ưu tiên admin collections
+          final existingCollections = planExerciseCollection.toList();
+          final mergedCollections = [...existingCollections, ...dedupedExerciseCollections];
+
+          final Map<DateTime, PlanExerciseCollection> _mergedByDate = {};
+          for (var col in mergedCollections) {
+            final key = DateUtils.dateOnly(col.date);
+            // Ưu tiên admin collections (planID = 0) hơn user collections
+            if (!_mergedByDate.containsKey(key) || col.planID == 0) {
+              _mergedByDate[key] = col;
+            }
+          }
+
+          planExerciseCollection.assignAll(_mergedByDate.values.toList()
+            ..sort((a, b) => a.date.compareTo(b.date)));
+        }
         _log(
             '📦 planExerciseCollection.length = ${planExerciseCollection.length} (deduped by date)');
         _log('📦 IDs: ${planExerciseCollection.map((c) => c.id).toList()}');
@@ -457,10 +497,9 @@ class WorkoutPlanController extends GetxController {
   }
 
   List<WorkoutCollection> loadAllWorkoutCollection() {
-    // Prefer plan-based collections (grouped by date) when available so "All days"
-    // view matches admin plan content. If no plan collections, fall back to admin workouts.
+    // Only show admin-created collections (planID = 0) grouped by date
     if (planExerciseCollection.isNotEmpty) {
-      var collection = planExerciseCollection.toList();
+      var collection = planExerciseCollection.where((col) => col.planID == 0).toList();
 
       Map<DateTime, List<PlanExerciseCollection>> collectionsByDate = {};
       for (var col in collection) {
@@ -493,30 +532,25 @@ class WorkoutPlanController extends GetxController {
       return result;
     }
 
-    // Fallback: use admin-provided workout library (one collection per workout)
-    final allWorkouts = DataService.instance.workoutList;
-    if (allWorkouts.isNotEmpty) {
-      return allWorkouts.map((w) {
-        final wid = w.id ?? '';
-        return WorkoutCollection(
-          wid,
-          title: w.name,
-          description: w.hints,
-          asset: w.thumbnail,
-          generatorIDs: wid.isEmpty ? <String>[] : [wid],
-          categoryIDs: <String>[],
-        );
-      }).toList();
-    }
-
+    // No fallback - only show admin-created collections
     return <WorkoutCollection>[];
   }
 
   List<WorkoutCollection> loadWorkoutCollectionToShow(DateTime date) {
-    // First prefer plan-based collections for the specific date (sync with admin plan).
+    debugPrint('🔍 loadWorkoutCollectionToShow: date=${date.toIso8601String()}, planExerciseCollection.length=${planExerciseCollection.length}');
+
+    // Show admin-created collections (planID = 0) for today and nearby dates
     var collection = planExerciseCollection
-        .where((element) => DateUtils.isSameDay(element.date, date))
+        .where((element) => element.planID == 0 &&
+                           (DateUtils.isSameDay(element.date, date) ||
+                            element.date.isAfter(date.subtract(const Duration(days: 1))) &&
+                            element.date.isBefore(date.add(const Duration(days: 8)))))
         .toList();
+
+    debugPrint('📋 Admin collections found for date range: ${collection.length}');
+    if (collection.isNotEmpty) {
+      debugPrint('📅 Collection dates: ${collection.map((c) => c.date.toIso8601String()).join(', ')}');
+    }
 
     if (collection.isNotEmpty) {
       final seenIds = <String>{};
@@ -545,24 +579,61 @@ class WorkoutPlanController extends GetxController {
       }).toList();
     }
 
-    // If no plan collections for the date, fallback to admin-provided workout library.
-    final allWorkouts = DataService.instance.workoutList;
-    if (allWorkouts.isNotEmpty) {
-      // Convert workouts to collections for today's view.
-      return allWorkouts.map((w) {
-        final wid = w.id ?? '';
-        return WorkoutCollection(
-          wid,
-          title: w.name,
-          description: w.hints,
-          asset: w.thumbnail,
-          generatorIDs: wid.isEmpty ? <String>[] : [wid],
-          categoryIDs: <String>[],
+    // No fallback - only show admin-created collections
+    return <WorkoutCollection>[];
+  }
+
+  List<MealCollection> getMealCollectionsByDate(DateTime date) {
+    debugPrint('🍽️ getMealCollectionsByDate: date=${date.toIso8601String()}, planMealCollection.length=${planMealCollection.length}');
+
+    // Show admin-created meal collections (planID = 0) for today and nearby dates
+    var collection = planMealCollection
+        .where((element) => element.planID == 0 &&
+                           (DateUtils.isSameDay(element.date, date) ||
+                            element.date.isAfter(date.subtract(const Duration(days: 1))) &&
+                            element.date.isBefore(date.add(const Duration(days: 8)))))
+        .toList();
+
+    debugPrint('🍽️ Admin meal collections found for date range: ${collection.length}');
+    if (collection.isNotEmpty) {
+      debugPrint('🍽️ Collection dates: ${collection.map((c) => c.date.toIso8601String()).join(', ')}');
+    }
+
+    if (collection.isNotEmpty) {
+      final seenIds = <String>{};
+      final uniqueCollections = <PlanMealCollection>[];
+      for (var col in collection) {
+        if (col.id != null && col.id!.isNotEmpty && !seenIds.contains(col.id)) {
+          seenIds.add(col.id!);
+          uniqueCollections.add(col);
+        } else if (col.id == null || col.id!.isEmpty) {
+          uniqueCollections.add(col);
+        }
+      }
+
+      return uniqueCollections.asMap().entries.map((entry) {
+        final index = entry.key;
+        final col = entry.value;
+        List<PlanMeal> mealList =
+            planMeal.where((p) => p.listID == col.id).toList();
+
+        // Create dateToMealID map for the collection
+        final dateKey = DateUtils.dateOnly(date).toIso8601String().split('T')[0];
+        final mealIDs = mealList.map((m) => m.mealID).toList();
+
+        return MealCollection(
+          id: col.id ?? '',
+          title: 'Bữa ăn thứ ${index + 1}', // ← Logic chính: tạo "Bữa ăn thứ X"
+          description: '',
+          note: '',
+          asset: '',
+          dateToMealID: {dateKey: mealIDs},
         );
       }).toList();
     }
 
-    return <WorkoutCollection>[];
+    // If no plan collections for the date, return empty list
+    return <MealCollection>[];
   }
 
   Future<CollectionSetting?> getCollectionSetting(

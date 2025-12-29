@@ -1,10 +1,11 @@
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:vipt/app/data/services/api_client.dart';
 import 'chatbot_service.dart';
 
 class ChatbotController extends GetxController {
-  final ChatbotService _chatbotService = ChatbotService();
+  final ChatbotService _chatbotService = ChatbotService(ApiClient.instance);
 
   var messages = <Map<String, String>>[].obs;
   var isLoading = false.obs;

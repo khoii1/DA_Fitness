@@ -22,6 +22,7 @@ import ingredientRoutes from "./routes/ingredient.routes.js";
 import librarySectionRoutes from "./routes/library_section.routes.js";
 import uploadRoutes from "./routes/upload.routes.js";
 import recommendationRoutes from "./routes/recommendation.routes.js";
+import chatbotRoutes from "./routes/chatbot.routes.js";
 
 import { errorHandler } from "./middleware/errorHandler.middleware.js";
 
@@ -90,6 +91,7 @@ app.use("/api/ingredients", ingredientRoutes);
 app.use("/api/library-sections", librarySectionRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/recommendations", recommendationRoutes);
+app.use("/api/chatbot", chatbotRoutes);
 
 io.on("connection", (socket) => {
   socket.on("join-user-room", (userId) => {
