@@ -57,7 +57,10 @@ class DailyNutritionScreen extends StatelessWidget {
                       ),
                       Text(
                         tabs[0].tr,
-                        style: Theme.of(context).textTheme.headlineMedium!.copyWith(
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineMedium!
+                            .copyWith(
                               color: AppColor.accentTextColor,
                             ),
                       ),

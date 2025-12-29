@@ -7,12 +7,14 @@ class GoalProgressIndicator extends StatelessWidget {
   final String unitString;
   final double radius;
   final int? goalValue;
+  final bool forceWhiteOnNegative;
   const GoalProgressIndicator(
       {Key? key,
       required this.value,
       required this.unitString,
       this.radius = 134,
-      this.goalValue})
+      this.goalValue,
+      this.forceWhiteOnNegative = false})
       : super(key: key);
 
   @override
@@ -43,14 +45,22 @@ class GoalProgressIndicator extends StatelessWidget {
                 textAlign: TextAlign.center,
                 text: TextSpan(
                   children: <TextSpan>[
+                    // Show number (no leading +); negative values include '-' automatically
                     TextSpan(
                       text: '$value',
                       style: Theme.of(context).textTheme.titleLarge!.copyWith(
-                            color: AppColor.accentTextColor,
+                            color: value < 0
+                                ? (forceWhiteOnNegative ? Colors.white : AppColor.errorColor)
+                                : AppColor.accentTextColor,
                             fontWeight: FontWeight.bold,
                           ),
                     ),
-                    if (goalValue != null) TextSpan(text: '/$goalValue'),
+                    if (goalValue != null)
+                      TextSpan(
+                        text: '/$goalValue',
+                        style: Theme.of(context).textTheme.titleLarge!.copyWith(
+                            color: AppColor.accentTextColor, fontWeight: FontWeight.w500),
+                      ),
                   ],
                 ),
               ),

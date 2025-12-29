@@ -63,15 +63,20 @@ class PlanSchedule extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 if (exercises.isNotEmpty) ...[
-                  Text('${exercises.length} bài tập',
+                  Text('${exercises.where((e) => e != null).length} bài tập',
                       style: Theme.of(context).textTheme.bodySmall),
                   const SizedBox(height: 8),
-                  ...exercises.map((e) => ExerciseInCollectionTile(
-                        asset: e.thumbnail,
-                        title: e.name,
-                        description: e.metValue > 0 ? 'MET: ${e.metValue}' : '',
-                        onPressed: () =>
-                            Get.toNamed('/exercise-detail', arguments: e),
+                  ...exercises.where((e) => e != null).map((e) =>
+                      ExerciseInCollectionTile(
+                        asset: e.thumbnail ?? '',
+                        title: e.name ?? 'Unknown Exercise',
+                        description:
+                            (e.metValue ?? 0) > 0 ? 'MET: ${e.metValue}' : '',
+                        onPressed: () {
+                          if (e != null) {
+                            Get.toNamed(Routes.exerciseDetail, arguments: e);
+                          }
+                        },
                       )),
                 ],
                 if (meals.isNotEmpty) ...[

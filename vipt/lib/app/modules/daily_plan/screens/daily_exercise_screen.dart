@@ -8,9 +8,8 @@ import 'package:get/get.dart';
 import 'package:get/get_utils/src/extensions/internacionalization.dart';
 import 'package:vipt/app/core/values/asset_strings.dart';
 import 'package:vipt/app/core/values/colors.dart';
-import 'package:vipt/app/data/services/data_service.dart';
+// import 'package:vipt/app/data/services/data_service.dart'; // unused
 import 'package:vipt/app/modules/daily_plan/daily_exercise_controller.dart';
-import 'package:vipt/app/modules/daily_plan/widgets/collection_tab_holder.dart';
 import 'package:vipt/app/modules/daily_plan/widgets/goal_progress_indicator.dart';
 import 'package:vipt/app/modules/daily_plan/widgets/input_amount_dialog.dart';
 import 'package:vipt/app/modules/daily_plan/widgets/vertical_info_widget.dart';
@@ -63,7 +62,10 @@ class DailyExerciseScreen extends StatelessWidget {
                       ),
                       Text(
                         tabs[1].tr,
-                        style: Theme.of(context).textTheme.headlineMedium!.copyWith(
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineMedium!
+                            .copyWith(
                               color: AppColor.accentTextColor,
                             ),
                       ),
@@ -153,37 +155,7 @@ class DailyExerciseScreen extends StatelessWidget {
                               topRight: Radius.circular(15),
                             ),
                           ),
-                          child: SingleChildScrollView(
-                            physics: const NeverScrollableScrollPhysics(),
-                            child: Column(
-                              children: [
-                                Text(
-                                  "LUYỆN TẬP".tr,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleSmall!
-                                      .copyWith(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                ),
-                                const SizedBox(
-                                  height: 12,
-                                ),
-                                Divider(
-                                  thickness: 1,
-                                  color: AppColor.textFieldUnderlineColor,
-                                ),
-                                const SizedBox(
-                                  height: 8,
-                                ),
-                                CollectionTabHolder(
-                                    firstCollection:
-                                        DataService.instance.collectionList,
-                                    secondCollection: DataService
-                                        .instance.userCollectionList),
-                              ],
-                            ),
-                          ),
+                          child: const SizedBox.shrink(),
                         ),
                       ),
                     ],

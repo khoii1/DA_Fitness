@@ -141,6 +141,9 @@ class WorkoutPlanScreen extends StatelessWidget {
                                                   .toString(),
                                           showAction:
                                               false, // Bỏ nút "Bắt đầu lại" - streak tự động reset
+                                          outtakeCalories: _controller.outtakeCalories.value,
+                                          intakeCalories: _controller.intakeCalories.value,
+                                          goalCalories: _controller.dailyOuttakeGoalCalories.value,
                                         );
                                       },
                                     ),
@@ -379,9 +382,9 @@ class WorkoutPlanScreen extends StatelessWidget {
             Flexible(
               flex: 3,
               child: Obx(
-                () {
-                  final leftValueForCircle = _controller.outtakeCalories.value -
-                      _controller.intakeCalories.value;
+                  () {
+                  final leftValueForCircle = _controller.intakeCalories.value -
+                      _controller.outtakeCalories.value;
                   // Hiển thị mục tiêu từ controller (đã tính từ thông tin user)
                   final goalValue =
                       _controller.dailyOuttakeGoalCalories.value > 0
@@ -392,6 +395,7 @@ class WorkoutPlanScreen extends StatelessWidget {
                     value: leftValueForCircle,
                     unitString: 'calories',
                     goalValue: goalValue,
+                    forceWhiteOnNegative: true,
                   );
                 },
               ),

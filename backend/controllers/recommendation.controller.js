@@ -169,8 +169,8 @@ export const createPlan = async (req, res) => {
       date.setDate(date.getDate() + i);
       date.setHours(0, 0, 0, 0);
 
-      // Determine exercises per day (randomly 3-5)
-      const exercisesPerDay = 3 + Math.floor(Math.random() * 3); // 3, 4, or 5
+      // Determine exercises per day (randomly 3-4)
+      const exercisesPerDay = 3 + Math.floor(Math.random() * 2); // 3 or 4
       const exercisesForDay = selectRandomExercises(
         recommendedExerciseIDs,
         exercisesPerDay
@@ -728,6 +728,9 @@ export const extendPlan = async (req, res) => {
     const planMealsToCreate = [];
 
     let prevMealIds = new Set();
+
+    // Determine exercises per day for extension (randomly 3-4)
+    const exercisesPerDayExtend = 3 + Math.floor(Math.random() * 2); // 3 or 4
 
     for (let i = 1; i <= safeDaysToAdd; i++) {
       const date = new Date(startDate);

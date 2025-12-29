@@ -422,6 +422,9 @@ class WorkoutPlanController extends GetxController {
 
     dailyDiffCalories.value = intakeCalories.value - outtakeCalories.value;
     await _validateDailyCalories();
+
+    // Force validate streak cho ngày hiện tại với logic mới
+    await validateAndUpdateStreak();
   }
 
   void _checkAndResetIfNewDay() {
@@ -444,6 +447,7 @@ class WorkoutPlanController extends GetxController {
 
     if (dailyOuttakeGoalCalories.value == 0) {
       await loadOuttakeGoalCalories();
+      _log('📊 Đã load goal calories: ${dailyOuttakeGoalCalories.value}');
     }
 
     DateTime dateKey = DateUtils.dateOnly(DateTime.now());
@@ -469,27 +473,30 @@ class WorkoutPlanController extends GetxController {
 
     bool todayStreakValue = todayStreak.value;
 
-    // Logic mới: Cứ có tập luyện (outtakeCalories > 0) là được tính streak
-    // Không cần đạt mục tiêu, chỉ cần có bài tập
-    final hasExercisedToday = outtakeCalories.value > 0;
+    // Logic mới: Flame sáng khi đạt 100% progress (calo net >= goal)
+    final netCalories = outtakeCalories.value - intakeCalories.value;
+    final goalCalories = dailyOuttakeGoalCalories.value;
+    final hasCompletedGoal = netCalories >= goalCalories;
 
-    if (hasExercisedToday) {
-      // Đã tập hôm nay -> streak = true
+    _log('🔍 DEBUG Flame: outtake=${outtakeCalories.value}, intake=${intakeCalories.value}, net=$netCalories, goal=$goalCalories, completed=$hasCompletedGoal');
+
+    if (hasCompletedGoal) {
+      // Đạt 100% mục tiêu -> streak = true
       if (!todayStreakValue) {
         Streak newStreak = Streak(
             date: todayStreak.date, planID: todayStreak.planID, value: true);
         await _streakProvider.update(todayStreak.id ?? 0, newStreak);
-        _log('🔥 Streak hôm nay = TRUE (đã tập ${outtakeCalories.value} calo)');
+        _log('🔥 Streak hôm nay = TRUE (đạt mục tiêu: ${netCalories}/${dailyOuttakeGoalCalories.value} calo)');
         await loadPlanStreak();
         update();
       }
     } else {
-      // Chưa tập hôm nay -> streak = false
+      // Chưa đạt mục tiêu -> streak = false
       if (todayStreakValue) {
         Streak newStreak = Streak(
             date: todayStreak.date, planID: todayStreak.planID, value: false);
         await _streakProvider.update(todayStreak.id ?? 0, newStreak);
-        _log('⚪ Streak hôm nay = FALSE (chưa tập)');
+        _log('⚪ Streak hôm nay = FALSE (chưa đạt: ${netCalories}/${dailyOuttakeGoalCalories.value} calo)');
         await loadPlanStreak();
         update();
       }

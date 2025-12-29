@@ -6,6 +6,7 @@ import 'package:vipt/app/modules/recommendation_preview/recommendation_preview_c
 import 'package:vipt/app/modules/recommendation_preview/widgets/plan_info_card.dart';
 import 'package:vipt/app/modules/recommendation_preview/widgets/recommendation_form.dart';
 import 'package:vipt/app/modules/recommendation_preview/widgets/plan_schedule.dart';
+import 'package:vipt/app/modules/recommendation_preview/widgets/calorie_summary_card.dart';
 
 class RecommendationPreviewScreen extends StatelessWidget {
   const RecommendationPreviewScreen({Key? key}) : super(key: key);
@@ -84,6 +85,10 @@ class RecommendationPreviewScreen extends StatelessWidget {
 
                 // Plan Info Card
                 PlanInfoCard(controller: controller),
+                const SizedBox(height: 12),
+
+                // Calorie summary based on user data (BMR/TDEE/intake/outtake/net)
+                CalorieSummaryCard(controller: controller),
                 const SizedBox(height: 16),
 
                 // If a plan exists, show full 7-day schedule (meals + exercises)
