@@ -16,36 +16,26 @@ import 'package:vipt/app/global_widgets/custom_confirmation_dialog.dart';
 import 'package:vipt/app/routes/pages.dart';
 
 class WorkoutCollectionController extends GetxController {
-  // Reactive loading state
   final RxBool isRefreshing = false.obs;
 
-  // property
-  // list chứa tất cả các collection - Reactive
   final RxList<WorkoutCollection> collections = <WorkoutCollection>[].obs;
-  // list chứa tất cả các category của các collection - Reactive
+
   final RxList<WorkoutCollectionCategory> collectionCategories =
       <WorkoutCollectionCategory>[].obs;
-  // map chứa danh sách các cate và các collection tương ứng
-  // late Map<String, int> cateListAndNumCollection;
-  // collection setting của collection được chọn
+
   Rx<CollectionSetting> collectionSetting = CollectionSetting().obs;
 
   WorkoutCollectionCategory workoutCollectionTree = WorkoutCollectionCategory();
 
-  // Lưu lại category đang được xem để refresh khi data thay đổi
   Category? _currentViewingCategory;
 
-  // giá trị calo và value của collection được chọn
   Rx<double> caloValue = 0.0.obs;
   Rx<double> timeValue = 0.0.obs;
 
-  // list collection của user tự tạo
   List<WorkoutCollection> userCollections = [];
 
-  // collection được chọn
   WorkoutCollection? selectedCollection;
 
-  // biến để phân biệt user collection hay default collection
   bool isDefaultCollection = false;
 
   // danh sách workout của collection được chọn
@@ -229,18 +219,14 @@ class WorkoutCollectionController extends GetxController {
     } else {
       maxWorkout.value = workoutList.length;
 
-      // Nếu numOfWorkoutPerRound = 0 hoặc lớn hơn số lượng workout có, set lại
-      if (collectionSetting.value.numOfWorkoutPerRound == 0 ||
-          collectionSetting.value.numOfWorkoutPerRound > maxWorkout.value) {
-        collectionSetting.value.numOfWorkoutPerRound = maxWorkout.value;
-      }
+      collectionSetting.value.numOfWorkoutPerRound = maxWorkout.value;
 
-      workoutList.shuffle();
+      final uniqueWorkouts = workoutList.toSet().toList();
+      uniqueWorkouts.shuffle();
 
-      // Đảm bảo không bị lỗi khi sublist
       int count = collectionSetting.value.numOfWorkoutPerRound;
-      if (count > 0 && count <= workoutList.length) {
-        generatedWorkoutList = workoutList.sublist(0, count);
+      if (count > 0 && count <= uniqueWorkouts.length) {
+        generatedWorkoutList = uniqueWorkouts.sublist(0, count);
       } else {
         generatedWorkoutList = [];
       }
@@ -262,14 +248,27 @@ class WorkoutCollectionController extends GetxController {
 
     final index = userCollections
         .indexWhere((element) => element.id == selectedCollection!.id);
+
+    // Check if collection exists in userCollections before updating
+    if (index == -1) {
+      debugPrint('Collection not found in userCollections, skipping update');
+      return;
+    }
+
     userCollections[index] = selectedCollection!;
 
-    loadWorkoutListForUserCollection();
+    // Load workouts từ collection mới và update UI ngay lập tức
+    await loadWorkoutListForUserCollection();
     generateRandomList();
-    update();
+    calculateCaloAndTime(); // Đảm bảo calo và time được tính lại
+    update(); // Update UI với workout list mới
 
+    // Update backend
     await WorkoutCollectionProvider()
         .update(selectedCollection!.id ?? '', selectedCollection!);
+
+    // Reload tất cả data từ server để đảm bảo consistency
+    await refreshCollectionData();
   }
 
   deleteUserCollection() async {
@@ -329,7 +328,11 @@ class WorkoutCollectionController extends GetxController {
 
     final workoutProvider = WorkoutProvider();
 
-    for (var id in selectedCollection!.generatorIDs) {
+    // Remove duplicates from generatorIDs before processing
+    final uniqueGeneratorIDs =
+        selectedCollection!.generatorIDs.toSet().toList();
+
+    for (var id in uniqueGeneratorIDs) {
       if (id.isEmpty) {
         continue;
       }

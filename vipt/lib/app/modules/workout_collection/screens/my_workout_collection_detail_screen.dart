@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import 'package:get/get_utils/src/extensions/internacionalization.dart';
 import 'package:vipt/app/core/values/asset_strings.dart';
 import 'package:vipt/app/core/values/colors.dart';
+import 'package:vipt/app/data/models/workout_collection.dart';
 import 'package:vipt/app/global_widgets/app_bar_icon_button.dart';
 import 'package:vipt/app/global_widgets/asset_image_background_container.dart';
 import 'package:vipt/app/global_widgets/exercise_list_widget.dart';
@@ -25,17 +26,33 @@ class MyWorkoutCollectionDetailScreen extends StatelessWidget {
   }
 
   void init() {
+    // Check if WorkoutCollection is passed via arguments
+    final args = Get.arguments;
+    if (args is WorkoutCollection) {
+      _controller.selectedCollection = args;
+    }
     _controller.loadCollectionSetting();
-  }
-
-  void handleDeleteAction() async {
-    await _controller.deleteUserCollection();
-    handleBackAction();
   }
 
   @override
   Widget build(BuildContext context) {
     init();
+
+    // Return loading or error if selectedCollection is null
+    if (_controller.selectedCollection == null) {
+      return Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          title: Text('Lỗi'),
+        ),
+        body: Center(
+          child: Text('Không tìm thấy bộ luyện tập'),
+        ),
+      );
+    }
 
     return WillPopScope(
       onWillPop: () async {
@@ -83,37 +100,17 @@ class MyWorkoutCollectionDetailScreen extends StatelessWidget {
                 handleBackAction();
                 Navigator.of(context).pop();
               }),
-          actions: [
-            AppBarIconButton(
-                padding: const EdgeInsets.fromLTRB(0, 8, 8, 8),
-                hero: 'actionButtonAppBar1',
-                iconData: Icons.delete_rounded,
-                onPressed: () {
-                  handleDeleteAction();
-                }),
-            // này phải check thêm xem collection này là custom hay default.
-            AppBarIconButton(
-                padding: const EdgeInsets.fromLTRB(0, 8, 8, 8),
-                hero: 'actionButtonAppBar2',
-                iconData: Icons.settings_rounded,
-                onPressed: () async {
-                  final result =
-                      await Get.toNamed(Routes.editWorkoutCollection);
-                  if (result != null) {
-                    await _controller.editUserCollection(result);
-                    init();
-                    _controller.calculateCaloAndTime();
-                  }
-                }),
-          ],
+          actions: [],
         ),
         body: AssetImageBackgroundContainer(
           imageURL: JPGAssetString.userWorkoutCollection,
           child: Column(
             children: [
               IntroCollectionWidget(
-                  title: _controller.selectedCollection!.title.tr,
-                  description: _controller.selectedCollection!.description.tr),
+                  title: _controller.selectedCollection?.title.tr ??
+                      'Không có tiêu đề',
+                  description: _controller.selectedCollection?.description.tr ??
+                      'Không có mô tả'),
               const SizedBox(
                 height: 8,
               ),
@@ -144,7 +141,9 @@ class MyWorkoutCollectionDetailScreen extends StatelessWidget {
                         '${_controller.collectionSetting.value.exerciseTime} giây'),
               ),
               SizedBox(
-                height: Theme.of(context).textTheme.labelLarge!.fontSize! * 4,
+                height:
+                    (Theme.of(context).textTheme.labelLarge?.fontSize ?? 14) *
+                        4,
               ),
             ],
           ),

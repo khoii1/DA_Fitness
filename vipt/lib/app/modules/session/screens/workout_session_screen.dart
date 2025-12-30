@@ -111,26 +111,6 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
             style: Theme.of(context).textTheme.displaySmall,
           ),
         ),
-        actions: [
-          IconButton(
-            color: Theme.of(context).scaffoldBackgroundColor,
-            icon: Hero(
-              tag: 'actionButtonAppBar',
-              child: Icon(
-                Icons.format_list_bulleted_rounded,
-                color: AppColor.textColor,
-              ),
-            ),
-            onPressed: () {
-              pause();
-              if (_controller.isDefaultCollection) {
-                Get.toNamed(Routes.workoutCollectionSetting);
-              } else {
-                Get.toNamed(Routes.myWorkoutCollectionSetting);
-              }
-            },
-          ),
-        ],
         flexibleSpace: ClipRect(
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 7, sigmaY: 7),
@@ -342,12 +322,20 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
               const SizedBox(
                 width: 16,
               ),
-              Text(
-                '${_controller.workoutIndex + 1} trên ${_controller.workoutList.length}',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleSmall!
-                    .copyWith(color: AppColor.textColor),
+              Builder(
+                builder: (context) {
+                  bool isSingleWorkout = Get.arguments is Map && Get.arguments.containsKey('workouts');
+                  String displayText = isSingleWorkout
+                      ? '${_controller.currentRound} trên ${_controller.round}'
+                      : '${_controller.workoutIndex + 1} trên ${_controller.workoutList.length}';
+                  return Text(
+                    displayText,
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleSmall!
+                        .copyWith(color: AppColor.textColor),
+                  );
+                },
               ),
               const SizedBox(
                 width: 16,
@@ -585,8 +573,17 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
   }
 
   Widget _buildCollectionTimer() {
+    // Detect loại session: single workout hay collection workout
+    bool isSingleWorkout = Get.arguments is Map && Get.arguments.containsKey('workouts');
+
+    // Single workout: timeValue = giây
+    // Collection workout: timeValue = phút → cần *60
+    int duration = isSingleWorkout
+        ? _controller.timeValue.toInt()
+        : (_controller.timeValue * 60).toInt();
+
     return MyCircularCountDownTimer(
-      duration: _controller.timeValue.minutes.inSeconds,
+      duration: duration,
       initialDuration: 0,
       controller: _controller.collectionTimeController,
       width: 40,
@@ -633,6 +630,10 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
     if (result == 'stop') {
       // Lưu calo đã tập trước khi thoát
       await _controller.handleStopSession();
+      // Dispose SessionController if still exists
+      if (Get.isRegistered<SessionController>()) {
+        Get.delete<SessionController>();
+      }
       Navigator.of(context).pop();
     }
   }

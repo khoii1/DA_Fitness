@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:vipt/app/core/values/colors.dart';
+import 'package:vipt/app/data/models/workout.dart';
+import 'package:vipt/app/data/models/collection_setting.dart';
 import 'package:vipt/app/modules/recommendation_preview/recommendation_preview_controller.dart';
 import 'package:vipt/app/modules/workout_collection/widgets/exercise_in_collection_tile.dart';
 import 'package:vipt/app/routes/pages.dart';
@@ -24,7 +25,6 @@ class ExercisePreviewList extends StatelessWidget {
         }
 
         final exercisesToShow = controller.recommendedExercises.toList();
-        final hasMore = false;
 
         return Card(
           elevation: 2,
@@ -64,7 +64,7 @@ class ExercisePreviewList extends StatelessWidget {
                   description:
                       exercise.metValue > 0 ? 'MET: ${exercise.metValue}' : '',
                   onPressed: () {
-                    Get.toNamed(Routes.exerciseDetail, arguments: exercise);
+                    _showQuickSettingsAndStart(context, exercise);
                   },
                 );
               }).toList(),
@@ -72,6 +72,167 @@ class ExercisePreviewList extends StatelessWidget {
             ],
           ),
         );
+      },
+    );
+  }
+
+  void _showQuickSettingsAndStart(BuildContext context, Workout exercise) {
+    // Default settings
+    int selectedDuration = 45; // seconds
+    int selectedRounds = 1;
+    int selectedRestTime = 15; // seconds
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text(
+                'Cài đặt nhanh'.tr,
+                textAlign: TextAlign.center,
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Thời gian tập
+                  Text(
+                    'Thời gian tập'.tr,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [30, 45, 60, 90].map((duration) {
+                        return Container(
+                          margin: const EdgeInsets.only(right: 8),
+                          child: ChoiceChip(
+                            label: Text('${duration}s'),
+                            selected: selectedDuration == duration,
+                            onSelected: (selected) {
+                              if (selected) {
+                                setState(() => selectedDuration = duration);
+                              }
+                            },
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Số vòng
+                  Text(
+                    'Số vòng'.tr,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [1, 2, 3].map((rounds) {
+                        return Container(
+                          margin: const EdgeInsets.only(right: 8),
+                          child: ChoiceChip(
+                            label: Text('$rounds vòng'),
+                            selected: selectedRounds == rounds,
+                            onSelected: (selected) {
+                              if (selected) {
+                                setState(() => selectedRounds = rounds);
+                              }
+                            },
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Rest time
+                  Text(
+                    'Thời gian nghỉ'.tr,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [0, 15, 30, 45].map((rest) {
+                        return Container(
+                          margin: const EdgeInsets.only(right: 8),
+                          child: ChoiceChip(
+                            label: Text(rest == 0 ? 'Không' : '${rest}s'),
+                            selected: selectedRestTime == rest,
+                            onSelected: (selected) {
+                              if (selected) {
+                                setState(() => selectedRestTime = rest);
+                              }
+                            },
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.grey[600], // Màu chữ xám đậm
+                  ),
+                  child: Text('Hủy'.tr),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _startWorkoutSession(exercise, selectedDuration, selectedRounds, selectedRestTime);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    foregroundColor: Colors.white, // Màu chữ trắng
+                  ),
+                  child: Text('Bắt đầu'.tr),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _startWorkoutSession(Workout exercise, int duration, int rounds, int restTime) {
+    // Create a single-workout collection for this session
+    final singleWorkoutList = [exercise];
+
+    // Create collection settings
+    final settings = CollectionSetting(
+      round: rounds,
+      numOfWorkoutPerRound: 1, // Always 1 workout per round for single workout
+      isStartWithWarmUp: false,
+      isShuffle: false,
+      exerciseTime: duration,
+      transitionTime: 0,
+      restTime: restTime,
+      restFrequency: 1, // Rest after every exercise
+    );
+
+    // Navigate to workout session with single workout
+    Get.toNamed(
+      Routes.workoutSession,
+      arguments: {
+        'workouts': singleWorkoutList,
+        'settings': settings,
+        'title': exercise.name,
       },
     );
   }

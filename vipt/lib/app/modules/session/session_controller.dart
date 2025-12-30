@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:vipt/app/core/utilities/utils.dart';
+import 'package:vipt/app/data/models/collection_setting.dart';
 import 'package:vipt/app/data/models/exercise_tracker.dart';
 import 'package:vipt/app/data/models/workout.dart';
 import 'package:vipt/app/data/models/workout_collection.dart';
@@ -30,21 +31,64 @@ class SessionController extends GetxController {
   // property
 
   // collection hiện tại
-  WorkoutCollection currentCollection =
-      Get.find<WorkoutCollectionController>().selectedCollection!;
+  late WorkoutCollection currentCollection;
   // workout list lấy từ generated list
-  List<Workout> workoutList =
-      List.from(Get.find<WorkoutCollectionController>().generatedWorkoutList);
+  late List<Workout> workoutList;
   // thời gian của cả collection
-  final timeValue = Get.find<WorkoutCollectionController>().timeValue.value;
+  late double timeValue;
   // collection setting của collection
-  final collectionSetting =
-      Get.find<WorkoutCollectionController>().collectionSetting.value;
+  late CollectionSetting collectionSetting;
   // biến phân biệt user collection vs default collection
-  final isDefaultCollection =
-      Get.find<WorkoutCollectionController>().isDefaultCollection;
+  late bool isDefaultCollection;
+
+  SessionController() {
+    // Check if custom data is passed via arguments
+    final args = Get.arguments;
+    if (args is Map && args.containsKey('workouts')) {
+      // Custom single workout session
+      _initWithCustomData(args);
+    } else {
+      // Default collection session
+      _initWithCollectionData();
+    }
+  }
+
+  void _initWithCustomData(Map args) {
+    workoutList = args['workouts'] as List<Workout>;
+    collectionSetting = args['settings'] as CollectionSetting;
+    final title = args['title'] as String? ?? 'Single Workout';
+
+    // Create a dummy collection for single workout
+    currentCollection = WorkoutCollection(
+      'single_workout',
+      title: title,
+      description: 'Single workout session',
+      asset: '',
+      generatorIDs: [],
+      categoryIDs: [],
+    );
+
+    // Calculate total time by initializing lists first (only count activities with time > 0)
+    initLists();
+    timeValue = timeList.isEmpty ? 0.0 : timeList.fold<int>(0, (sum, time) => sum + time).toDouble();
+
+    // Reset round counter for single workouts
+    currentRound = 1;
+    isDefaultCollection = false;
+  }
+
+  void _initWithCollectionData() {
+    currentCollection = Get.find<WorkoutCollectionController>().selectedCollection!;
+    workoutList = List.from(Get.find<WorkoutCollectionController>().generatedWorkoutList);
+    timeValue = Get.find<WorkoutCollectionController>().timeValue.value;
+    collectionSetting = Get.find<WorkoutCollectionController>().collectionSetting.value;
+    isDefaultCollection = Get.find<WorkoutCollectionController>().isDefaultCollection;
+  }
   // lấy workout hiện tại trong session
   Workout get currentWorkout => workoutList[workoutIndex];
+
+  // current round (for single workout display)
+  int currentRound = 1;
   // controller của collection timer
   final collectionTimeController = MyCountDownController();
   // controller của workout timer
@@ -94,39 +138,62 @@ class SessionController extends GetxController {
   // method
   // hàm init cho timeList, activites, workoutList
   void initLists() {
+    // Detect loại session để apply logic tương ứng
+    bool isSingleWorkout = Get.arguments is Map && Get.arguments.containsKey('workouts');
+
     int transitionTime = collectionSetting.transitionTime;
     int workoutTime = collectionSetting.exerciseTime;
     int restTime = collectionSetting.restTime;
     int restFreq = collectionSetting.restFrequency;
+    int round = collectionSetting.round;
 
-    for (int i = 0; i < workoutList.length; i++) {
-      timeList.add(transitionTime);
-      activites.add(Activity.transition);
+    if (isSingleWorkout) {
+      // Single workout: chỉ 1 workout, round chỉ affect số lần lặp activities
+      // Không nhân workoutList
+      for (int r = 0; r < round; r++) {
+        timeList.add(transitionTime);
+        activites.add(Activity.transition);
 
-      timeList.add(workoutTime);
-      activites.add(Activity.workout);
+        timeList.add(workoutTime);
+        activites.add(Activity.workout);
 
-      // Kiểm tra restFreq > 0 để tránh chia cho 0
-      if (restFreq > 0 &&
-          (i + 1) % restFreq == 0 &&
-          i + 1 != workoutList.length) {
+        // Add rest between rounds (except last round)
+        if (r < round - 1) {
+          timeList.add(restTime);
+          activites.add(Activity.rest);
+        }
+      }
+      // workoutList giữ nguyên: [1 workout]
+    } else {
+      // Collection workout: logic gốc
+      for (int i = 0; i < workoutList.length; i++) {
+        timeList.add(transitionTime);
+        activites.add(Activity.transition);
+
+        timeList.add(workoutTime);
+        activites.add(Activity.workout);
+
+        // Kiểm tra restFreq > 0 để tránh chia cho 0
+        if (restFreq > 0 &&
+            (i + 1) % restFreq == 0 &&
+            i + 1 != workoutList.length) {
+          timeList.add(restTime);
+          activites.add(Activity.rest);
+        }
+      }
+
+      List<int> cloneList = timeList.sublist(0);
+      List<Activity> activityClone = activites.sublist(0);
+      List<Workout> workoutClone = workoutList.sublist(0);
+
+      for (int i = 1; i < round; i++) {
         timeList.add(restTime);
         activites.add(Activity.rest);
+
+        timeList.addAll(cloneList);
+        activites.addAll(activityClone);
+        workoutList.addAll(workoutClone);
       }
-    }
-
-    int round = collectionSetting.round;
-    List<int> cloneList = timeList.sublist(0);
-    List<Activity> activityClone = activites.sublist(0);
-    List<Workout> workoutClone = workoutList.sublist(0);
-
-    for (int i = 1; i < round; i++) {
-      timeList.add(restTime);
-      activites.add(Activity.rest);
-
-      timeList.addAll(cloneList);
-      activites.addAll(activityClone);
-      workoutList.addAll(workoutClone);
     }
   }
 
@@ -152,11 +219,20 @@ class SessionController extends GetxController {
     if (isWorkoutTurn) {
       calculateCaloConsumed(timeList[workoutTimerIndex]);
       completedWorkout++;
+
+      // For single workout, increment round when completing a workout
+      bool isSingleWorkout = Get.arguments is Map && Get.arguments.containsKey('workouts');
+      if (isSingleWorkout && currentRound < round) {
+        currentRound++;
+      }
     }
 
     workoutTimerIndex++;
     if (workoutTimerIndex >= timeList.length) {
       workoutTimerIndex--;
+      // Session completed - stop collection timer
+      collectionTimeController.pause();
+      status.value = TimerStatus.pause;
       return;
     }
 
@@ -305,6 +381,9 @@ class SessionController extends GetxController {
       }
 
       _markRelevantTabToUpdate();
+
+      // Dispose SessionController after stopping session
+      Get.delete<SessionController>();
     } else {
       debugPrint('⚠️ Không có calo nào được đốt, không lưu');
     }
@@ -339,6 +418,9 @@ class SessionController extends GetxController {
     _markRelevantTabToUpdate();
 
     await Get.toNamed(Routes.completeSession);
+
+    // Dispose SessionController after navigating to complete screen
+    Get.delete<SessionController>();
   }
 
   void _markRelevantTabToUpdate() {

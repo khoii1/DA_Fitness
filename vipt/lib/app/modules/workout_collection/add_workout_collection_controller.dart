@@ -81,11 +81,13 @@ class AddWorkoutCollectionController extends GetxController {
   }
 
   assignForSelectValueList() {
-    selectValueList = RxList.from(workoutIDs);
+    // Remove duplicates when assigning to selectValueList
+    selectValueList.assignAll(workoutIDs.toSet().toList());
   }
 
   onSaveAfterAddExercise() {
-    workoutIDs = [...selectValueList];
+    // Remove duplicates when saving
+    workoutIDs = selectValueList.toSet().toList();
     update();
     Get.back();
     selectValueList.clear();
@@ -95,7 +97,10 @@ class AddWorkoutCollectionController extends GetxController {
     if (selectValueList.contains(id)) {
       selectValueList.remove(id);
     } else {
-      selectValueList.add(id);
+      // Double check to prevent duplicates
+      if (!selectValueList.contains(id)) {
+        selectValueList.add(id);
+      }
     }
   }
 

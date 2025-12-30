@@ -15,15 +15,54 @@ class CompleteSessionScreen extends StatelessWidget {
   final _controller = Get.find<SessionController>();
 
   void backToDetailScreen() {
+    // Dispose SessionController before navigating back
+    if (Get.isRegistered<SessionController>()) {
+      Get.delete<SessionController>();
+    }
     Get.back();
     Get.back();
     Get.back();
+  }
+
+  String _getTimeUnit(double totalSeconds) {
+    int totalSecondsInt = totalSeconds.toInt();
+    int minutes = totalSecondsInt ~/ 60;
+    int seconds = totalSecondsInt % 60;
+
+    if (minutes == 0) {
+      return 'giây';
+    } else if (seconds == 0) {
+      return 'phút';
+    } else {
+      return 'giây';
+    }
+  }
+
+  String _getTimeString(double totalSeconds) {
+    int totalSecondsInt = totalSeconds.toInt();
+    int minutes = totalSecondsInt ~/ 60;
+    int seconds = totalSecondsInt % 60;
+
+    if (minutes == 0) {
+      // Chỉ giây: "30 giây"
+      return totalSecondsInt.toString();
+    } else if (seconds == 0) {
+      // Chỉ phút: "30 phút"
+      return minutes.toString();
+    } else {
+      // Có cả phút và giây: "01:30 giây"
+      return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
+        // Dispose SessionController before navigating back
+        if (Get.isRegistered<SessionController>()) {
+          Get.delete<SessionController>();
+        }
         backToDetailScreen();
         return true;
       },
@@ -33,6 +72,10 @@ class CompleteSessionScreen extends StatelessWidget {
         floatingActionButton: FloatingActionButton.extended(
           backgroundColor: AppColor.secondaryColor,
           onPressed: () {
+            // Dispose SessionController before navigating back
+            if (Get.isRegistered<SessionController>()) {
+              Get.delete<SessionController>();
+            }
             backToDetailScreen();
           },
           isExtended: true,
@@ -96,18 +139,16 @@ class CompleteSessionScreen extends StatelessWidget {
                         height: 16,
                       ),
                       CompleteIndicatorDisplayWidget(
-                        timeUnit:
-                            _controller.timeConsumed / 60 < 1 ? 'giây' : 'phút',
-                        timeString: _controller.timeConsumed / 60 < 1
-                            ? (_controller.timeConsumed.toInt()).toString()
-                            : (_controller.timeConsumed / 60).ceil().toString(),
+                        timeUnit: _getTimeUnit(_controller.timeConsumed),
+                        timeString: _getTimeString(_controller.timeConsumed),
                         exerciseCountString:
                             _controller.completedWorkout.toString(),
                         caloString: _controller.caloConsumed.ceil().toString(),
                       ),
                       SizedBox(
                         height:
-                            Theme.of(context).textTheme.labelLarge!.fontSize! * 4,
+                            Theme.of(context).textTheme.labelLarge!.fontSize! *
+                                4,
                       ),
                     ],
                   ),
