@@ -46,17 +46,21 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
       _videoController = VideoPlayerController.network(link);
       try {
         await _videoController!.initialize();
-        setState(() {
-          _videoController!.setLooping(true);
-          isInitVideo = false;
-          hasVideoError = false;
-          _videoController!.play();
-        });
+        if (mounted) {
+          setState(() {
+            _videoController!.setLooping(true);
+            isInitVideo = false;
+            hasVideoError = false;
+            _videoController!.play();
+          });
+        }
       } catch (e) {
-        setState(() {
-          isInitVideo = false;
-          hasVideoError = true;
-        });
+        if (mounted) {
+          setState(() {
+            isInitVideo = false;
+            hasVideoError = true;
+          });
+        }
       }
     } else {
       final oldController = _videoController;
@@ -66,23 +70,29 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
         _videoController = VideoPlayerController.network(link);
         try {
           await _videoController!.initialize();
-          setState(() {
-            _videoController!.setLooping(true);
-            isInitVideo = false;
-            hasVideoError = false;
-            _videoController!.play();
-          });
+          if (mounted) {
+            setState(() {
+              _videoController!.setLooping(true);
+              isInitVideo = false;
+              hasVideoError = false;
+              _videoController!.play();
+            });
+          }
         } catch (e) {
-          setState(() {
-            isInitVideo = false;
-            hasVideoError = true;
-          });
+          if (mounted) {
+            setState(() {
+              isInitVideo = false;
+              hasVideoError = true;
+            });
+          }
         }
       });
 
-      setState(() {
-        _videoController = null;
-      });
+      if (mounted) {
+        setState(() {
+          _videoController = null;
+        });
+      }
     }
   }
 
@@ -183,9 +193,11 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
     _controller.onWorkoutTimerComplete();
     // thiếu case rest turn
     if (_controller.isWorkoutTurn || _controller.isRestTurn) {
-      setState(() {
-        _videoController?.play();
-      });
+      if (mounted) {
+        setState(() {
+          _videoController?.play();
+        });
+      }
     } else if (_controller.isTransitionTurn) {
       _initVideoController(_controller.currentWorkout.animation);
     } else {
@@ -221,9 +233,11 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
   Future<void> skip() async {
     _videoController?.pause();
     await _controller.skip();
-    setState(() {
-      _initVideoController(_controller.currentWorkout.animation);
-    });
+    if (mounted) {
+      setState(() {
+        _initVideoController(_controller.currentWorkout.animation);
+      });
+    }
   }
 
   Widget _buildMediaPlayer() {
@@ -324,7 +338,8 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
               ),
               Builder(
                 builder: (context) {
-                  bool isSingleWorkout = Get.arguments is Map && Get.arguments.containsKey('workouts');
+                  bool isSingleWorkout = Get.arguments is Map &&
+                      Get.arguments.containsKey('workouts');
                   String displayText = isSingleWorkout
                       ? '${_controller.currentRound} trên ${_controller.round}'
                       : '${_controller.workoutIndex + 1} trên ${_controller.workoutList.length}';
@@ -574,7 +589,8 @@ class _WorkoutSessionScreenState extends State<WorkoutSessionScreen> {
 
   Widget _buildCollectionTimer() {
     // Detect loại session: single workout hay collection workout
-    bool isSingleWorkout = Get.arguments is Map && Get.arguments.containsKey('workouts');
+    bool isSingleWorkout =
+        Get.arguments is Map && Get.arguments.containsKey('workouts');
 
     // Single workout: timeValue = giây
     // Collection workout: timeValue = phút → cần *60
