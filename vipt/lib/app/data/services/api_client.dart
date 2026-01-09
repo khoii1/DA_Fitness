@@ -14,7 +14,7 @@ class ApiClient {
       return 'http://localhost:3000';
     } else {
       // Android Emulator: dùng 10.0.2.2 để kết nối đến localhost của máy host
-      return 'http://192.168.1.4:3000';
+      return 'http://192.168.1.7:3000';
     }
   }
 

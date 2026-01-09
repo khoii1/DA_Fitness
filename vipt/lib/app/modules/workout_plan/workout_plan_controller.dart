@@ -286,8 +286,12 @@ class WorkoutPlanController extends GetxController {
         // Logic xử lý collections theo planID
         if (planID == 0) {
           // Admin plan: merge với existing collections, ưu tiên admin collections
-          final existingNonAdminCollections = planExerciseCollection.where((col) => col.planID != 0).toList();
-          final mergedCollections = [...dedupedExerciseCollections, ...existingNonAdminCollections];
+          final existingNonAdminCollections =
+              planExerciseCollection.where((col) => col.planID != 0).toList();
+          final mergedCollections = [
+            ...dedupedExerciseCollections,
+            ...existingNonAdminCollections
+          ];
 
           final Map<DateTime, PlanExerciseCollection> _mergedByDate = {};
           for (var col in mergedCollections) {
@@ -303,7 +307,10 @@ class WorkoutPlanController extends GetxController {
         } else {
           // User plan: merge với existing collections, ưu tiên admin collections
           final existingCollections = planExerciseCollection.toList();
-          final mergedCollections = [...existingCollections, ...dedupedExerciseCollections];
+          final mergedCollections = [
+            ...existingCollections,
+            ...dedupedExerciseCollections
+          ];
 
           final Map<DateTime, PlanExerciseCollection> _mergedByDate = {};
           for (var col in mergedCollections) {
@@ -478,7 +485,8 @@ class WorkoutPlanController extends GetxController {
     final goalCalories = dailyOuttakeGoalCalories.value;
     final hasCompletedGoal = netCalories >= goalCalories;
 
-    _log('🔍 DEBUG Flame: outtake=${outtakeCalories.value}, intake=${intakeCalories.value}, net=$netCalories, goal=$goalCalories, completed=$hasCompletedGoal');
+    _log(
+        '🔍 DEBUG Flame: outtake=${outtakeCalories.value}, intake=${intakeCalories.value}, net=$netCalories, goal=$goalCalories, completed=$hasCompletedGoal');
 
     if (hasCompletedGoal) {
       // Đạt 100% mục tiêu -> streak = true
@@ -486,7 +494,8 @@ class WorkoutPlanController extends GetxController {
         Streak newStreak = Streak(
             date: todayStreak.date, planID: todayStreak.planID, value: true);
         await _streakProvider.update(todayStreak.id ?? 0, newStreak);
-        _log('🔥 Streak hôm nay = TRUE (đạt mục tiêu: ${netCalories}/${dailyOuttakeGoalCalories.value} calo)');
+        _log(
+            '🔥 Streak hôm nay = TRUE (đạt mục tiêu: ${netCalories}/${dailyOuttakeGoalCalories.value} calo)');
         await loadPlanStreak();
         update();
       }
@@ -496,7 +505,8 @@ class WorkoutPlanController extends GetxController {
         Streak newStreak = Streak(
             date: todayStreak.date, planID: todayStreak.planID, value: false);
         await _streakProvider.update(todayStreak.id ?? 0, newStreak);
-        _log('⚪ Streak hôm nay = FALSE (chưa đạt: ${netCalories}/${dailyOuttakeGoalCalories.value} calo)');
+        _log(
+            '⚪ Streak hôm nay = FALSE (chưa đạt: ${netCalories}/${dailyOuttakeGoalCalories.value} calo)');
         await loadPlanStreak();
         update();
       }
@@ -506,7 +516,8 @@ class WorkoutPlanController extends GetxController {
   List<WorkoutCollection> loadAllWorkoutCollection() {
     // Only show admin-created collections (planID = 0) grouped by date
     if (planExerciseCollection.isNotEmpty) {
-      var collection = planExerciseCollection.where((col) => col.planID == 0).toList();
+      var collection =
+          planExerciseCollection.where((col) => col.planID == 0).toList();
 
       Map<DateTime, List<PlanExerciseCollection>> collectionsByDate = {};
       for (var col in collection) {
@@ -544,19 +555,20 @@ class WorkoutPlanController extends GetxController {
   }
 
   List<WorkoutCollection> loadWorkoutCollectionToShow(DateTime date) {
-    debugPrint('🔍 loadWorkoutCollectionToShow: date=${date.toIso8601String()}, planExerciseCollection.length=${planExerciseCollection.length}');
+    debugPrint(
+        '🔍 loadWorkoutCollectionToShow: date=${date.toIso8601String()}, planExerciseCollection.length=${planExerciseCollection.length}');
 
-    // Show admin-created collections (planID = 0) for today and nearby dates
+    // Show admin-created collections (planID = 0) for the selected date only
+    final dateKey = DateUtils.dateOnly(date);
     var collection = planExerciseCollection
-        .where((element) => element.planID == 0 &&
-                           (DateUtils.isSameDay(element.date, date) ||
-                            element.date.isAfter(date.subtract(const Duration(days: 1))) &&
-                            element.date.isBefore(date.add(const Duration(days: 8)))))
+        .where((element) =>
+            element.planID == 0 && DateUtils.isSameDay(element.date, dateKey))
         .toList();
 
-    debugPrint('📋 Admin collections found for date range: ${collection.length}');
+    debugPrint('📋 Admin collections found for date: ${collection.length}');
     if (collection.isNotEmpty) {
-      debugPrint('📅 Collection dates: ${collection.map((c) => c.date.toIso8601String()).join(', ')}');
+      debugPrint(
+          '📅 Collection dates: ${collection.map((c) => c.date.toIso8601String()).join(', ')}');
     }
 
     if (collection.isNotEmpty) {
@@ -591,19 +603,21 @@ class WorkoutPlanController extends GetxController {
   }
 
   List<MealCollection> getMealCollectionsByDate(DateTime date) {
-    debugPrint('🍽️ getMealCollectionsByDate: date=${date.toIso8601String()}, planMealCollection.length=${planMealCollection.length}');
+    debugPrint(
+        '🍽️ getMealCollectionsByDate: date=${date.toIso8601String()}, planMealCollection.length=${planMealCollection.length}');
 
-    // Show admin-created meal collections (planID = 0) for today and nearby dates
+    // Show admin-created meal collections (planID = 0) for the selected date only
+    final dateKey = DateUtils.dateOnly(date);
     var collection = planMealCollection
-        .where((element) => element.planID == 0 &&
-                           (DateUtils.isSameDay(element.date, date) ||
-                            element.date.isAfter(date.subtract(const Duration(days: 1))) &&
-                            element.date.isBefore(date.add(const Duration(days: 8)))))
+        .where((element) =>
+            element.planID == 0 && DateUtils.isSameDay(element.date, dateKey))
         .toList();
 
-    debugPrint('🍽️ Admin meal collections found for date range: ${collection.length}');
+    debugPrint(
+        '🍽️ Admin meal collections found for date: ${collection.length}');
     if (collection.isNotEmpty) {
-      debugPrint('🍽️ Collection dates: ${collection.map((c) => c.date.toIso8601String()).join(', ')}');
+      debugPrint(
+          '🍽️ Collection dates: ${collection.map((c) => c.date.toIso8601String()).join(', ')}');
     }
 
     if (collection.isNotEmpty) {
@@ -625,7 +639,8 @@ class WorkoutPlanController extends GetxController {
             planMeal.where((p) => p.listID == col.id).toList();
 
         // Create dateToMealID map for the collection
-        final dateKey = DateUtils.dateOnly(date).toIso8601String().split('T')[0];
+        final dateKey =
+            DateUtils.dateOnly(date).toIso8601String().split('T')[0];
         final mealIDs = mealList.map((m) => m.mealID).toList();
 
         return MealCollection(
@@ -867,17 +882,17 @@ class WorkoutPlanController extends GetxController {
 
           if (defaultCollections.isNotEmpty) {
             defaultCollections.sort((a, b) => a.date.compareTo(b.date));
-          // Deduplicate default collections by date as well
-          final Map<DateTime, PlanMealCollection> _defaultByDate = {};
-          for (var col in defaultCollections) {
-            final key = DateUtils.dateOnly(col.date);
-            if (!_defaultByDate.containsKey(key)) {
-              _defaultByDate[key] = col;
+            // Deduplicate default collections by date as well
+            final Map<DateTime, PlanMealCollection> _defaultByDate = {};
+            for (var col in defaultCollections) {
+              final key = DateUtils.dateOnly(col.date);
+              if (!_defaultByDate.containsKey(key)) {
+                _defaultByDate[key] = col;
+              }
             }
-          }
-          final dedupedDefaultCollections = _defaultByDate.values.toList()
-            ..sort((a, b) => a.date.compareTo(b.date));
-          planMealCollection.assignAll(dedupedDefaultCollections);
+            final dedupedDefaultCollections = _defaultByDate.values.toList()
+              ..sort((a, b) => a.date.compareTo(b.date));
+            planMealCollection.assignAll(dedupedDefaultCollections);
 
             List<PlanMeal> tempPlanMeals = [];
             for (int i = 0; i < defaultCollections.length; i++) {
@@ -943,7 +958,8 @@ class WorkoutPlanController extends GetxController {
       List<PlanMeal> _list = planMeal
           .where((element) => element.listID == (collection.first.id ?? ''))
           .toList();
-      debugPrint('🔍 loadMealListToShow: found ${_list.length} PlanMeal for listID=${collection.first.id}');
+      debugPrint(
+          '🔍 loadMealListToShow: found ${_list.length} PlanMeal for listID=${collection.first.id}');
       List<MealNutrition> mealList = [];
 
       for (var element in _list) {
@@ -1057,14 +1073,16 @@ class WorkoutPlanController extends GetxController {
         for (int d = 0; d < days; d++) {
           List<String> daySelected = [];
           int attempts = 0;
-          while (daySelected.length < mealsPerDay && attempts < pool.length * 2) {
+          while (
+              daySelected.length < mealsPerDay && attempts < pool.length * 2) {
             final candidate = pool[poolIndex % pool.length];
             poolIndex++;
             attempts++;
             final cid = candidate.id ?? '';
             if (cid.isEmpty) continue;
             if (daySelected.contains(cid)) continue;
-            if (prevDayIds.contains(cid)) continue; // avoid consecutive-day repeat
+            if (prevDayIds.contains(cid))
+              continue; // avoid consecutive-day repeat
             daySelected.add(cid);
           }
           // If still not enough (pool small), allow using items not already in daySelected (may repeat across days)
@@ -1080,8 +1098,8 @@ class WorkoutPlanController extends GetxController {
           // Convert to MealNutrition and append
           for (var mid in daySelected) {
             try {
-              Meal? existing =
-                  DataService.instance.mealList.firstWhereOrNull((m) => m.id == mid);
+              Meal? existing = DataService.instance.mealList
+                  .firstWhereOrNull((m) => m.id == mid);
               if (existing != null) {
                 generated.add(await _toMealNutrition(existing));
               } else {

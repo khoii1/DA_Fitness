@@ -15,9 +15,11 @@ import 'package:vipt/app/data/services/data_service.dart';
 import 'package:vipt/app/global_widgets/custom_confirmation_dialog.dart';
 import 'package:vipt/app/global_widgets/loading_widget.dart';
 import 'package:vipt/app/modules/nutrition/nutrition_controller.dart';
+import 'package:vipt/app/modules/nutrition_collection/nutrition_collection_controller.dart';
 import 'package:vipt/app/modules/workout_collection/widgets/exercise_in_collection_tile.dart';
 import 'package:vipt/app/modules/workout_collection/workout_collection_controller.dart';
 import 'package:vipt/app/modules/workout_plan/screens/all_plan_exercise_screen.dart';
+import 'package:vipt/app/modules/workout_plan/screens/all_plan_meal_collections_screen.dart';
 import 'package:vipt/app/modules/workout_plan/screens/all_plan_nutrition.screen.dart';
 import 'package:vipt/app/routes/pages.dart';
 import 'package:vipt/app/core/utilities/utils.dart';
@@ -41,8 +43,8 @@ class _PlanTabHolderState extends State<PlanTabHolder>
   final _controller = Get.find<WorkoutPlanController>();
 
   List<WorkoutCollection> workouts = [];
-  List<MealCollection> mealCollections =
-      []; // Thêm để lưu danh sách bữa ăn collections
+  Map<DateTime, List<MealCollection>> mealCollectionsByDate =
+      {}; // Group by date
   List<MealNutrition> meals = [];
   List<WorkoutCollection> allWorkouts = [];
   List<MealNutrition> allMeals = [];
@@ -126,9 +128,25 @@ class _PlanTabHolderState extends State<PlanTabHolder>
 
     // Load admin meal collections (planID = 0)
     await _controller.loadWorkoutPlanMealList(0, lightLoad: false);
-    mealCollections = _controller.getMealCollectionsByDate(DateTime.now());
 
-    debugPrint('🍽️ Meal collections loaded: ${mealCollections.length}');
+    // Group meal collections by date
+    mealCollectionsByDate.clear();
+    final uniqueDates = <DateTime>{};
+    for (var planMeal in _controller.planMealCollection) {
+      if (planMeal.planID == 0) {
+        uniqueDates.add(DateUtils.dateOnly(planMeal.date));
+      }
+    }
+
+    for (var date in uniqueDates) {
+      final mealsForDate = _controller.getMealCollectionsByDate(date);
+      if (mealsForDate.isNotEmpty) {
+        mealCollectionsByDate[date] = mealsForDate;
+      }
+    }
+
+    debugPrint(
+        '🍽️ Meal collections loaded for ${mealCollectionsByDate.length} days');
 
     if (mounted) {
       setState(() {});
@@ -161,8 +179,21 @@ class _PlanTabHolderState extends State<PlanTabHolder>
     _controller.loadWorkoutPlanMealList(0, lightLoad: false).then((_) {
       if (!mounted) return;
       setState(() {
-        // Update mealCollections from admin collections only
-        mealCollections = _controller.getMealCollectionsByDate(DateTime.now());
+        // Update mealCollections grouped by date
+        mealCollectionsByDate.clear();
+        final uniqueDates = <DateTime>{};
+        for (var planMeal in _controller.planMealCollection) {
+          if (planMeal.planID == 0) {
+            uniqueDates.add(DateUtils.dateOnly(planMeal.date));
+          }
+        }
+
+        for (var date in uniqueDates) {
+          final mealsForDate = _controller.getMealCollectionsByDate(date);
+          if (mealsForDate.isNotEmpty) {
+            mealCollectionsByDate[date] = mealsForDate;
+          }
+        }
       });
     });
   }
@@ -295,8 +326,8 @@ class _PlanTabHolderState extends State<PlanTabHolder>
                       padding: EdgeInsets.all(24.0), child: LoadingWidget())
                   : Column(
                       children: [
-                        ..._buildMealCollectionList(
-                          mealCollectionList: mealCollections,
+                        ..._buildMealCollectionsByDate(
+                          mealCollectionsByDate: mealCollectionsByDate,
                           elementOnPress: (collection) async {
                             await handleSelectMealCollection(collection);
                           },
@@ -323,57 +354,43 @@ class _PlanTabHolderState extends State<PlanTabHolder>
                                       ),
                                 ),
                                 onPressed: () async {
-                                  // Navigate to full-screen AllPlanNutritionScreen with admin meal collections
-                                  UIUtils.showLoadingDialog();
-
-                                  List<MealNutrition> nutritionToShow = [];
-                                  try {
-                                    // Load admin collections (planID = 0)
-                                    await _controller.loadWorkoutPlanMealList(0,
-                                        lightLoad: false);
-
-                                    // Build nutrition list from admin plan meals
-                                    if (_controller.planMeal.isNotEmpty) {
-                                      final firebaseMealProvider =
-                                          MealProvider();
-                                      List<MealNutrition> tmp = [];
-                                      for (var pm in _controller.planMeal) {
-                                        final mealId = pm.mealID;
-                                        if (mealId.isEmpty) continue;
-                                        try {
-                                          final existing = DataService
-                                              .instance.mealList
-                                              .firstWhereOrNull(
-                                                  (m) => m.id == mealId);
-                                          if (existing != null) {
-                                            final mn =
-                                                MealNutrition(meal: existing);
-                                            try {
-                                              await mn.getIngredients();
-                                            } catch (_) {}
-                                            tmp.add(mn);
-                                          }
-                                        } catch (e) {
-                                          debugPrint(
-                                              '⚠️ Failed to load meal $mealId: $e');
-                                        }
-                                      }
-                                      nutritionToShow = tmp;
-                                    }
-                                  } catch (e) {
-                                    debugPrint(
-                                        '⚠️ Failed to load admin meal collections: $e');
+                                  // Khởi tạo NutritionCollectionController nếu chưa có
+                                  if (!Get.isRegistered<
+                                      NutritionCollectionController>()) {
+                                    Get.put(NutritionCollectionController());
                                   }
 
-                                  UIUtils.hideLoadingDialog();
-                                  if (!mounted) return;
+                                  // Navigate to full-screen với meal collections grouped by date
+                                  // Lấy tất cả meal collections đã group theo ngày
+                                  final allMealsByDate =
+                                      Map<DateTime, List<MealCollection>>.from(
+                                          mealCollectionsByDate);
 
-                                  Get.to(() => AllPlanNutritionScreen(
-                                        isLoading: false,
-                                        nutritionList: nutritionToShow,
+                                  // Convert sang list để hiển thị
+                                  List<MealCollection> allCollections = [];
+                                  final sortedDates =
+                                      allMealsByDate.keys.toList()..sort();
+                                  for (var date in sortedDates) {
+                                    allCollections
+                                        .addAll(allMealsByDate[date] ?? []);
+                                  }
+
+                                  if (allCollections.isEmpty) {
+                                    Get.snackbar('Thông báo',
+                                        'Không có bữa ăn nào để hiển thị');
+                                    return;
+                                  }
+
+                                  // Navigate đến AllPlanNutritionScreen nhưng với collections
+                                  // Thay vì dùng AllPlanNutritionScreen (hiển thị từng món),
+                                  // ta sẽ navigate đến màn hình list collections
+                                  Get.to(() => AllPlanMealCollectionsScreen(
                                         startDate: startDate,
-                                        elementOnPress: (nutri) async {
-                                          await handleSelectMeal(nutri);
+                                        mealCollectionsByDate: allMealsByDate,
+                                        onCollectionPressed:
+                                            (MealCollection collection) async {
+                                          await handleSelectMealCollection(
+                                              collection);
                                         },
                                       ));
                                 },
@@ -532,96 +549,101 @@ class _PlanTabHolderState extends State<PlanTabHolder>
   _buildCollectionList(
       {required List<WorkoutCollection> workoutCollectionList,
       required Function(WorkoutCollection) elementOnPress}) {
-    int collectionPerDay = 4;
     List<Widget> results = [];
 
-    int count = workoutCollectionList.length;
-    for (int i = 0; i < count; i++) {
-      WorkoutCollection collection = workoutCollectionList[i];
-      String cateList = DataService.instance.collectionCateList
-          .where((item) => collection.categoryIDs.contains(item.id))
-          .map((e) => e.name)
-          .toString()
-          .replaceAll(RegExp(r'\(|\)'), '');
+    // Group collections by date
+    Map<DateTime, List<WorkoutCollection>> collectionsByDate = {};
 
-      Widget collectionToWidget = Container(
-        margin: const EdgeInsets.symmetric(vertical: 8),
-        child: ExerciseInCollectionTile(
-            asset: collection.asset == ''
-                ? JPGAssetString.userWorkoutCollection
-                : collection.asset,
-            title: collection.title,
-            description: cateList,
-            onPressed: () {
-              elementOnPress(collection);
-            }),
+    for (var collection in workoutCollectionList) {
+      // Tìm ngày thực tế từ PlanExerciseCollection
+      final planExerciseCollection = _controller.planExerciseCollection
+          .firstWhereOrNull((col) => col.id == collection.id);
+
+      if (planExerciseCollection != null) {
+        final dateKey = DateUtils.dateOnly(planExerciseCollection.date);
+        collectionsByDate.putIfAbsent(dateKey, () => []);
+        collectionsByDate[dateKey]!.add(collection);
+      }
+    }
+
+    // Sort dates và build widgets
+    final sortedDates = collectionsByDate.keys.toList()..sort();
+    int dayNumber = 1;
+
+    for (var date in sortedDates) {
+      final dayCollections = collectionsByDate[date]!;
+
+      // Day indicator
+      Widget dayIndicator = Padding(
+        padding: const EdgeInsets.only(top: 16, bottom: 4),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Divider(
+                thickness: 1,
+                color: AppColor.textFieldUnderlineColor,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'NGÀY $dayNumber',
+                  style: Theme.of(context).textTheme.titleSmall!.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${date.day}/${date.month}/${date.year}',
+                  style: Theme.of(context).textTheme.bodyLarge!.copyWith(
+                        color: AppColor.textColor.withOpacity(
+                          AppColor.subTextOpacity,
+                        ),
+                      ),
+                ),
+              ],
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Divider(
+                thickness: 1,
+                color: AppColor.textFieldUnderlineColor,
+              ),
+            ),
+          ],
+        ),
       );
 
-      if (i % collectionPerDay == 0) {
-        // Tìm ngày thực tế từ PlanExerciseCollection
-        final planExerciseCollection = _controller.planExerciseCollection
-            .firstWhereOrNull((col) => col.id == collection.id);
-        final actualDate = planExerciseCollection?.date ?? DateTime.now();
+      results.add(dayIndicator);
 
-        Widget dayIndicator = Padding(
-          padding: const EdgeInsets.only(top: 16, bottom: 4),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Divider(
-                  thickness: 1,
-                  color: AppColor.textFieldUnderlineColor,
-                ),
-              ),
-              const SizedBox(
-                width: 16,
-              ),
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // const SizedBox(
-                  //   height: 24,
-                  // ),
-                  Text(
-                    'NGÀY ${i ~/ collectionPerDay + 1}',
-                    style: Theme.of(context).textTheme.titleSmall!.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                  ),
-                  const SizedBox(
-                    height: 2,
-                  ),
-                  Text(
-                    '${actualDate.day}/${actualDate.month}/${actualDate.year}',
-                    style: Theme.of(context).textTheme.bodyLarge!.copyWith(
-                          color: AppColor.textColor.withOpacity(
-                            AppColor.subTextOpacity,
-                          ),
-                        ),
-                  ),
-                  // const SizedBox(
-                  //   height: 4,
-                  // ),
-                ],
-              ),
-              const SizedBox(
-                width: 16,
-              ),
-              Expanded(
-                child: Divider(
-                  thickness: 1,
-                  color: AppColor.textFieldUnderlineColor,
-                ),
-              ),
-            ],
-          ),
+      // Add all collections for this day
+      for (var collection in dayCollections) {
+        String cateList = DataService.instance.collectionCateList
+            .where((item) => collection.categoryIDs.contains(item.id))
+            .map((e) => e.name)
+            .toString()
+            .replaceAll(RegExp(r'\(|\)'), '');
+
+        Widget collectionToWidget = Container(
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          child: ExerciseInCollectionTile(
+              asset: collection.asset == ''
+                  ? JPGAssetString.userWorkoutCollection
+                  : collection.asset,
+              title: collection.title,
+              description: cateList,
+              onPressed: () {
+                elementOnPress(collection);
+              }),
         );
 
-        results.add(dayIndicator);
+        results.add(collectionToWidget);
       }
 
-      results.add(collectionToWidget);
+      dayNumber++;
     }
 
     return results;
@@ -748,18 +770,17 @@ class _PlanTabHolderState extends State<PlanTabHolder>
 
   // Handle khi user chọn một meal collection
   Future<void> handleSelectMealCollection(MealCollection collection) async {
-    // Lấy danh sách meal IDs từ collection
-    final dateKey =
-        DateUtils.dateOnly(DateTime.now()).toIso8601String().split('T')[0];
-    final mealIDs = collection.dateToMealID[dateKey] ?? [];
-
-    if (mealIDs.isEmpty) {
-      // Fallback: show message
-      Get.snackbar('Thông báo', 'Không có món ăn nào trong danh sách này');
-      return;
+    // Khởi tạo NutritionCollectionController nếu chưa có
+    if (!Get.isRegistered<NutritionCollectionController>()) {
+      Get.put(NutritionCollectionController());
     }
 
-    // Load meal nutrition cho các meal IDs này
+    // Navigate trực tiếp đến meal plan detail screen
+    // Screen này sẽ tự động load và hiển thị tất cả các meals trong collection
+    Get.toNamed(Routes.mealPlanDetail, arguments: collection);
+  }
+
+  Future<void> _loadAndShowMeals(List<String> mealIDs) async {
     final firebaseMealProvider = MealProvider();
     List<MealNutrition> mealNutritions = [];
 
@@ -776,103 +797,216 @@ class _PlanTabHolderState extends State<PlanTabHolder>
       }
     }
 
-    // Navigate to dish detail screen với meal đầu tiên, hoặc meal plan detail
+    // Navigate to meal list screen để hiển thị tất cả các món ăn
     if (mealNutritions.isNotEmpty) {
-      Get.toNamed(Routes.dishDetail, arguments: mealNutritions.first.meal);
+      // Nếu chỉ có 1 món, hiển thị detail luôn
+      if (mealNutritions.length == 1) {
+        Get.toNamed(Routes.dishDetail, arguments: mealNutritions.first.meal);
+      } else {
+        // Nếu có nhiều món, navigate đến màn hình danh sách meals
+        // Sử dụng meal plan detail hoặc tạo màn hình riêng
+        Get.toNamed(Routes.mealPlanDetail, arguments: {
+          'meals': mealNutritions.map((m) => m.meal).toList(),
+          'nutritions': mealNutritions,
+        });
+      }
     } else {
       Get.snackbar('Thông báo', 'Không có món ăn nào để hiển thị');
     }
   }
 
   // Build danh sách meal collections tương tự workout collections
+  // Build meal collections grouped by date
+  _buildMealCollectionsByDate(
+      {required Map<DateTime, List<MealCollection>> mealCollectionsByDate,
+      required Function(MealCollection) elementOnPress}) {
+    List<Widget> results = [];
+
+    if (mealCollectionsByDate.isEmpty) {
+      return results;
+    }
+
+    // Sort dates
+    final sortedDates = mealCollectionsByDate.keys.toList()..sort();
+    int dayNumber = 1;
+
+    for (var date in sortedDates) {
+      final dayCollections = mealCollectionsByDate[date]!;
+
+      // Day indicator
+      Widget dayIndicator = Padding(
+        padding: const EdgeInsets.only(top: 16, bottom: 4),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Divider(
+                thickness: 1,
+                color: AppColor.textFieldUnderlineColor,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'NGÀY $dayNumber',
+                  style: Theme.of(context).textTheme.titleSmall!.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${date.day}/${date.month}/${date.year}',
+                  style: Theme.of(context).textTheme.bodyLarge!.copyWith(
+                        color: AppColor.textColor.withOpacity(
+                          AppColor.subTextOpacity,
+                        ),
+                      ),
+                ),
+              ],
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Divider(
+                thickness: 1,
+                color: AppColor.textFieldUnderlineColor,
+              ),
+            ),
+          ],
+        ),
+      );
+
+      results.add(dayIndicator);
+
+      // Add all collections for this day
+      for (var collection in dayCollections) {
+        // Lấy số lượng meals trong collection - dùng tất cả meals từ dateToMealID
+        final allMealIDs =
+            collection.dateToMealID.values.expand((ids) => ids).toList();
+        final mealCount = allMealIDs.length;
+        String description = '$mealCount món ăn';
+
+        Widget collectionToWidget = Container(
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          child: ExerciseInCollectionTile(
+              asset: collection.asset.isNotEmpty
+                  ? collection.asset
+                  : JPGAssetString.nutrition, // Sử dụng icon nutrition
+              title: collection.title,
+              description: description,
+              onPressed: () {
+                elementOnPress(collection);
+              }),
+        );
+
+        results.add(collectionToWidget);
+      }
+
+      dayNumber++;
+    }
+
+    return results;
+  }
+
   _buildMealCollectionList(
       {required List<MealCollection> mealCollectionList,
       required Function(MealCollection) elementOnPress}) {
-    int collectionPerDay = 3; // Meals có ít collections hơn workouts
     List<Widget> results = [];
 
-    int count = mealCollectionList.length;
-    for (int i = 0; i < count; i++) {
-      MealCollection collection = mealCollectionList[i];
+    // Group collections by date
+    Map<DateTime, List<MealCollection>> collectionsByDate = {};
 
-      // Lấy số lượng meals trong collection - dùng tất cả meals từ dateToMealID
-      final allMealIDs =
-          collection.dateToMealID.values.expand((ids) => ids).toList();
-      final mealCount = allMealIDs.length;
-      String description = '$mealCount món ăn';
+    for (var collection in mealCollectionList) {
+      // Tìm ngày thực tế từ PlanMealCollection
+      final planMealCollection = _controller.planMealCollection
+          .firstWhereOrNull((col) => col.id == collection.id);
 
-      Widget collectionToWidget = Container(
-        margin: const EdgeInsets.symmetric(vertical: 8),
-        child: ExerciseInCollectionTile(
-            asset: collection.asset.isNotEmpty
-                ? collection.asset
-                : JPGAssetString.nutrition, // Sử dụng icon nutrition
-            title: collection.title,
-            description: description,
-            onPressed: () {
-              elementOnPress(collection);
-            }),
+      if (planMealCollection != null) {
+        final dateKey = DateUtils.dateOnly(planMealCollection.date);
+        collectionsByDate.putIfAbsent(dateKey, () => []);
+        collectionsByDate[dateKey]!.add(collection);
+      }
+    }
+
+    // Sort dates và build widgets
+    final sortedDates = collectionsByDate.keys.toList()..sort();
+    int dayNumber = 1;
+
+    for (var date in sortedDates) {
+      final dayCollections = collectionsByDate[date]!;
+
+      // Day indicator
+      Widget dayIndicator = Padding(
+        padding: const EdgeInsets.only(top: 16, bottom: 4),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Divider(
+                thickness: 1,
+                color: AppColor.textFieldUnderlineColor,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'NGÀY $dayNumber',
+                  style: Theme.of(context).textTheme.titleSmall!.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${date.day}/${date.month}/${date.year}',
+                  style: Theme.of(context).textTheme.bodyLarge!.copyWith(
+                        color: AppColor.textColor.withOpacity(
+                          AppColor.subTextOpacity,
+                        ),
+                      ),
+                ),
+              ],
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Divider(
+                thickness: 1,
+                color: AppColor.textFieldUnderlineColor,
+              ),
+            ),
+          ],
+        ),
       );
 
-      if (i % collectionPerDay == 0) {
-        // Tìm ngày thực tế từ PlanMealCollection
-        final planMealCollection = _controller.planMealCollection
-            .firstWhereOrNull((col) => col.id == collection.id);
-        final actualDate = planMealCollection?.date ?? DateTime.now();
+      results.add(dayIndicator);
 
-        Widget dayIndicator = Padding(
-          padding: const EdgeInsets.only(top: 16, bottom: 4),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Divider(
-                  thickness: 1,
-                  color: AppColor.textFieldUnderlineColor,
-                ),
-              ),
-              const SizedBox(
-                width: 16,
-              ),
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'NGÀY ${i ~/ collectionPerDay + 1}',
-                    style: Theme.of(context).textTheme.titleSmall!.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                  ),
-                  const SizedBox(
-                    height: 2,
-                  ),
-                  Text(
-                    '${actualDate.day}/${actualDate.month}/${actualDate.year}',
-                    style: Theme.of(context).textTheme.bodyLarge!.copyWith(
-                          color: AppColor.textColor.withOpacity(
-                            AppColor.subTextOpacity,
-                          ),
-                        ),
-                  ),
-                ],
-              ),
-              const SizedBox(
-                width: 16,
-              ),
-              Expanded(
-                child: Divider(
-                  thickness: 1,
-                  color: AppColor.textFieldUnderlineColor,
-                ),
-              ),
-            ],
-          ),
+      // Add all collections for this day
+      for (var collection in dayCollections) {
+        // Lấy số lượng meals trong collection - dùng tất cả meals từ dateToMealID
+        final allMealIDs =
+            collection.dateToMealID.values.expand((ids) => ids).toList();
+        final mealCount = allMealIDs.length;
+        String description = '$mealCount món ăn';
+
+        Widget collectionToWidget = Container(
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          child: ExerciseInCollectionTile(
+              asset: collection.asset.isNotEmpty
+                  ? collection.asset
+                  : JPGAssetString.nutrition, // Sử dụng icon nutrition
+              title: collection.title,
+              description: description,
+              onPressed: () {
+                elementOnPress(collection);
+              }),
         );
 
-        results.add(dayIndicator);
+        results.add(collectionToWidget);
       }
 
-      results.add(collectionToWidget);
+      dayNumber++;
     }
 
     return results;
